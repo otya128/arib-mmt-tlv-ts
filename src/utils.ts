@@ -4,7 +4,6 @@ export class BinaryReader {
     buffer: Uint8Array;
     view: DataView;
     offset: number;
-    textDecoder?: TextDecoder;
     constructor(buffer: Uint8Array, offset?: number) {
         this.buffer = buffer;
         this.view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);

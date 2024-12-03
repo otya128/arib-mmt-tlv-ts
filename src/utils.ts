@@ -47,7 +47,7 @@ export class BinaryReader {
             };
         }
         return {
-            seconds: seconds + (1 << 32),
+            seconds: seconds + 0x100000000,
             fractional,
         };
     }

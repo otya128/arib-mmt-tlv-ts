@@ -193,6 +193,21 @@ export class MMTPReader {
             if (!reader.canRead(2)) {
                 return;
             }
+            if (packetId === MMT_PID_SDT && this.eventTarget.getListenerCount("sdt") === 0) {
+                return;
+            }
+            if (packetId === MMT_PID_CDT && this.eventTarget.getListenerCount("cdt") === 0) {
+                return;
+            }
+            if (packetId === MMT_PID_BIT && this.eventTarget.getListenerCount("bit") === 0) {
+                return;
+            }
+            if (packetId === MMT_PID_EIT && this.eventTarget.getListenerCount("eit") === 0) {
+                return;
+            }
+            if (packetId === MMT_PID_TOT && this.eventTarget.getListenerCount("tot") === 0) {
+                return;
+            }
             const h = reader.readUint8();
             const fragmentationIndicator = h >> 6;
             // always 0

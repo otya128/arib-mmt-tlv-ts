@@ -3,6 +3,7 @@ import { MMTPReader as MMTPReader } from "./mmtp";
 import { TLV_HEADER_SIZE } from "./tlv";
 import { MMTTLVReaderEventMap, MMTTLVReaderEventTarget } from "./event";
 import { CustomEventTarget } from "./event-target";
+import { readNTPPacket } from "./ntp";
 
 export const TLV_SYNC_BYTE = 0x7f;
 // unused
@@ -16,6 +17,10 @@ export const TLV_PACKET_TYPE_NULL = 0xff;
 // const CID_HEADER_TYPE_IDENTIFICATION = 0x21;
 export const CID_HEADER_TYPE_IPV6_UDP_FULL = 0x60;
 export const CID_HEADER_TYPE_COMPRESSED = 0x61;
+
+const IPV6_HEADER_SIZE = 40;
+const IP_PROTOCOL_NUMBER_UDP = 0b00010001;
+const UDP_HEADER_SIZE = 8;
 
 export function createMMTTLVReader(): MMTTLVReader {
     return new MMTTLVReader();
@@ -37,6 +42,10 @@ export class MMTTLVReader {
     private buffer: Uint8Array;
     private mmtpReader: MMTPReader;
     private eventTarget?: MMTTLVReaderEventTarget;
+    private bytes_ = 0;
+    get bytes() {
+        return this.bytes_;
+    }
     constructor() {
         this.buffer = new Uint8Array(0);
         this.eventTarget = new CustomEventTarget<MMTTLVReaderEventMap>();
@@ -71,6 +80,43 @@ export class MMTTLVReader {
     reset() {
         this.buffer = new Uint8Array(0);
         this.mmtpReader.reset();
+        this.bytes_ = 0;
+    }
+
+    private processNTP(offset: number, tlvPacket: Uint8Array) {
+        if (!this.eventTarget?.getListenerCount("ntp")) {
+            return;
+        }
+        if (tlvPacket.length < TLV_HEADER_SIZE + IPV6_HEADER_SIZE) {
+            return;
+        }
+        const ipv6PayloadLength =
+            (tlvPacket[TLV_HEADER_SIZE + 4] << 8) | tlvPacket[TLV_HEADER_SIZE + 5];
+        const nextHeader = tlvPacket[TLV_HEADER_SIZE + 6];
+        if (ipv6PayloadLength + TLV_HEADER_SIZE + IPV6_HEADER_SIZE > tlvPacket.length) {
+            return;
+        }
+        if (nextHeader !== IP_PROTOCOL_NUMBER_UDP) {
+            return;
+        }
+        const udpPayloadLength =
+            (tlvPacket[TLV_HEADER_SIZE + IPV6_HEADER_SIZE + 4] << 8) |
+            tlvPacket[TLV_HEADER_SIZE + IPV6_HEADER_SIZE + 5];
+        if (
+            udpPayloadLength < UDP_HEADER_SIZE ||
+            udpPayloadLength + TLV_HEADER_SIZE + IPV6_HEADER_SIZE > tlvPacket.length
+        ) {
+            return;
+        }
+        const ntp = readNTPPacket(
+            tlvPacket.subarray(
+                TLV_HEADER_SIZE + IPV6_HEADER_SIZE + UDP_HEADER_SIZE,
+                TLV_HEADER_SIZE + IPV6_HEADER_SIZE + udpPayloadLength
+            )
+        );
+        if (ntp != null) {
+            this.eventTarget?.dispatchEvent("ntp", { offset, ntp });
+        }
     }
 
     push(block: Uint8Array) {
@@ -79,6 +125,8 @@ export class MMTTLVReader {
         }
         const buffer = new Uint8Array(this.buffer.length + block.length);
         buffer.set(this.buffer);
+        const offset = this.bytes_ - this.buffer.length;
+        this.bytes_ += block.length;
         buffer.set(block, this.buffer.length);
         this.buffer = buffer;
         while (this.buffer.length !== 0) {
@@ -93,7 +141,8 @@ export class MMTTLVReader {
                     this.onSI(tlvPacket);
                 }
                 if (packetType === TLV_PACKET_TYPE_IPV6) {
-                    // NTP (clock reference)
+                    // NTP (clock reference)]
+                    this.processNTP(offset + tlvPacket.byteOffset, tlvPacket);
                 }
                 if (packetType === TLV_PACKET_TYPE_COMPRESSED) {
                     if (tlvPacket.length < TLV_HEADER_SIZE + 4) {

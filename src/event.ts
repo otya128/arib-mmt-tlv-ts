@@ -10,6 +10,7 @@ import {
     MMTPackageTable,
 } from "./mmt-si";
 import { MediaProcessingUnit } from "./mpu";
+import { NTPPacket } from "./ntp";
 import { TLVNetworkInformationTable } from "./tlv-si";
 
 export interface MMTTLVReaderEventMap {
@@ -22,6 +23,7 @@ export interface MMTTLVReaderEventMap {
     plt: MMTSIEvent<PackageListTable>;
     mpt: MMTSIEvent<MMTPackageTable>;
     mpu: MediaProcessingUnitEvent;
+    ntp: NTPEvent;
 }
 
 export type MMTTLVReaderEventTarget = CustomEventTarget<MMTTLVReaderEventMap>;
@@ -31,3 +33,5 @@ export type MMTSIEvent<T> = { packetId: number; table: T };
 export type TLVSIEvent<T> = { table: T };
 
 export type MediaProcessingUnitEvent = { mmtHeader: MMTHeader; mpu: MediaProcessingUnit };
+
+export type NTPEvent = { offset: number; ntp: NTPPacket };

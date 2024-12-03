@@ -1,6 +1,6 @@
 {
     "name": "arib-mmt-tlv-ts",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "main": "dist/index.js",
     "exports": {
         ".": "./dist/index.js",
@@ -27,7 +27,8 @@
         "test": "node --enable-source-maps dist/test.js",
         "build": "tsc",
         "watch": "tsc -w",
-        "format": "prettier -w src/ *.json"
+        "format": "prettier -w src/ *.json",
+        "prepack": "npm run build"
     },
     "author": "otya",
     "license": "MIT",

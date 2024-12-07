@@ -84,9 +84,12 @@ export function readMPU(buffer: Uint8Array): MediaProcessingUnit | undefined {
                 mfuData,
             });
         } else {
-            while (reader.canRead(2 + 4)) {
+            while (reader.canRead(2)) {
                 const dataUnitLength = reader.readUint16();
                 if (!reader.canRead(dataUnitLength)) {
+                    break;
+                }
+                if (dataUnitLength < 4 + 4 + 4 + 1 + 1) {
                     break;
                 }
                 // always 0 (unused)
@@ -132,9 +135,12 @@ export function readMPU(buffer: Uint8Array): MediaProcessingUnit | undefined {
                 mfuData,
             });
         } else {
-            while (reader.canRead(2 + 4)) {
+            while (reader.canRead(2)) {
                 const dataUnitLength = reader.readUint16();
                 if (!reader.canRead(dataUnitLength)) {
+                    break;
+                }
+                if (dataUnitLength < 4) {
                     break;
                 }
                 const itemId = reader.readUint32();

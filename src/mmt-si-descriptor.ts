@@ -6,6 +6,20 @@ import {
 } from "./si-descriptor";
 export { EmergencyInformationDescriptor };
 import { BinaryReader } from "./utils";
+import {
+    SAMPLING_RATE_48000,
+    QUALITY_INDICATOR_MODE1,
+    QUALITY_INDICATOR_MODE2,
+    QUALITY_INDICATOR_MODE3,
+    STREAM_TYPE_LATM_LOAS,
+} from "./ts/si-descriptor";
+export {
+    SAMPLING_RATE_48000,
+    QUALITY_INDICATOR_MODE1,
+    QUALITY_INDICATOR_MODE2,
+    QUALITY_INDICATOR_MODE3,
+    STREAM_TYPE_LATM_LOAS,
+};
 
 const MMT_SI_ACESS_CONTROL_DESCRIPTOR = 0x8004;
 const MMT_SI_CONTENT_COPY_CONTROL_DESCRIPTOR = 0x8038;
@@ -539,15 +553,32 @@ export const TRANSFER_CHARACTERISTICS_BT2100_HLG = 5;
 
 export type VideoComponentDescriptor = {
     tag: "videoComponent";
+    /**
+     * @see {@link VIDEO_RESOLUTION_1080}
+     * @see {@link VIDEO_RESOLUTION_2160}
+     * @see {@link VIDEO_RESOLUTION_4320}
+     */
     videoResolution: number;
+    /** @see {@link ASPECT_RATIO_16_9} */
     videoAspectRatio: number;
     /** false: interlaced, true: progressive */
     videoScanFlag: boolean;
+    /**
+     * @see {@link FRAME_RATE_29_97}
+     * @see {@link FRAME_RATE_59_94}
+     * @see {@link FRAME_RATE_119_88}
+     */
     videoFrameRate: number;
     componentTag: number;
+    /**
+     * @see {@link TRANSFER_CHARACTERISTICS_BT709}
+     * @see {@link TRANSFER_CHARACTERISTICS_IEC_61966_2_4}
+     * @see {@link TRANSFER_CHARACTERISTICS_BT2020}
+     * @see {@link TRANSFER_CHARACTERISTICS_BT2100_HLG}
+     */
     videoTransferCharacteristics: number;
     iso639LanguageCode: number;
-    /* unused */
+    /** unused */
     text: Uint8Array;
 };
 
@@ -600,17 +631,55 @@ function readMHStreamIdentifierDescriptor(
 export const MH_AUDIO_COMPONENT_STREAM_CONTENT_MPEG4_AAC = 0x03;
 export const MH_AUDIO_COMPONENT_STREAM_CONTENT_MPEG4_ALS = 0x04;
 
+export const MH_AUDIO_COMPONENT_TYPE_MASK_DIALOGUE_CONTROL = 0b1_00_00000;
+export const MH_AUDIO_COMPONENT_TYPE_DIALOG_CONTROL_NONE = 0b0_00_00000;
+
+export const MH_AUDIO_COMPONENT_TYPE_MASK_HANDICAPPED = 0b11_00000;
+export const MH_AUDIO_COMPONENT_TYPE_NOT_SPECIFIED = 0b00_00000;
+export const MH_AUDIO_COMPONENT_TYPE_COMMENTARY_FOR_VISUALLY_IMPAIRED = 0b01_00000;
+export const MH_AUDIO_COMPONENT_TYPE_FOR_HEARING_IMPAIRED = 0b10_00000;
+
+export const MH_AUDIO_COMPONENT_TYPE_MASK_SOUND_MODE = 0b11111;
+export const MH_AUDIO_COMPONENT_TYPE_STEREO = 0b00011;
+export const MH_AUDIO_COMPONENT_TYPE_5POINT1 = 0b01001;
+export const MH_AUDIO_COMPONENT_TYPE_7POINT1 = 0b01110;
+export const MH_AUDIO_COMPONENT_TYPE_22POINT2 = 0b10001;
+
 export type MHAudioComponentDescriptor = {
     tag: "mhAudioComponent";
-    /** 3: MPEG-4 AAC, 4: MPEG-4 ALS */
+    /**
+     * @see {@link MH_AUDIO_COMPONENT_STREAM_CONTENT_MPEG4_AAC}
+     * @see {@link MH_AUDIO_COMPONENT_STREAM_CONTENT_MPEG4_ALS}
+     */
     streamContent: number;
+    /**
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_MASK_DIALOGUE_CONTROL}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_DIALOG_CONTROL_NONE}
+     *
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_MASK_HANDICAPPED}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_NOT_SPECIFIED}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_COMMENTARY_FOR_VISUALLY_IMPAIRED}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_FOR_HEARING_IMPAIRED}
+     *
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_MASK_SOUND_MODE}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_STEREO}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_5POINT1}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_7POINT1}
+     * @see {@link MH_AUDIO_COMPONENT_TYPE_22POINT2}
+     */
     componentType: number;
     componentTag: number;
-    /** always 0x11 (LATM/LOAS) */
+    /** @see {@link STREAM_TYPE_LATM_LOAS} */
     streamType: number;
     simulcastGroupTag: number;
     mainComponentFlag: boolean;
+    /**
+     * @see {@link QUALITY_INDICATOR_MODE1}
+     * @see {@link QUALITY_INDICATOR_MODE2}
+     * @see {@link QUALITY_INDICATOR_MODE3}
+     */
     qualityIndicator: number;
+    /** @see {@link SAMPLING_RATE_48000} */
     samplingRate: number;
     iso639LanguageCode: number;
     /** always undefined (dual mono) */

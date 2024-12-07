@@ -982,10 +982,46 @@ function readShortEventDescriptor(buffer: Uint8Array): ShortEventDescriptor | un
     };
 }
 
+export const STREAM_CONTENT_VIDEO = 0x1;
+
+export const COMPONENT_TYPE_480I_4_3 = 0x01;
+export const COMPONENT_TYPE_480I_16_9 = 0x03;
+export const COMPONENT_TYPE_480I_OVER_16_9 = 0x04;
+
+export const COMPONENT_TYPE_480P_4_3 = 0xa1;
+export const COMPONENT_TYPE_480P_16_9 = 0xa3;
+export const COMPONENT_TYPE_480P_OVER_16_9 = 0xa4;
+
+export const COMPONENT_TYPE_1080I_4_3 = 0xb1;
+export const COMPONENT_TYPE_1080I_16_9 = 0xb3;
+export const COMPONENT_TYPE_1080I_OVER_16_9 = 0xb4;
+
+export const COMPONENT_TYPE_720P_4_3 = 0xc1;
+export const COMPONENT_TYPE_720P_16_9 = 0xc3;
+export const COMPONENT_TYPE_720P_OVER_16_9 = 0xc4;
+
+export const COMPONENT_TYPE_240P_4_3 = 0xd1;
+export const COMPONENT_TYPE_240P_16_9 = 0xd3;
+export const COMPONENT_TYPE_240P_OVER_16_9 = 0xd4;
+
 export type ComponentDescriptor = {
     tag: "component";
-    /** always 0x01 (video) */
+    /** @see {@link STREAM_CONTENT_VIDEO} */
     streamContent: number;
+    /**
+     * @see {@link COMPONENT_TYPE_480I_4_3}
+     * @see {@link COMPONENT_TYPE_480I_16_9}
+     * @see {@link COMPONENT_TYPE_480I_OVER_16_9}
+     * @see {@link COMPONENT_TYPE_480P_4_3}
+     * @see {@link COMPONENT_TYPE_480P_16_9}
+     * @see {@link COMPONENT_TYPE_480P_OVER_16_9}
+     * @see {@link COMPONENT_TYPE_1080I_4_3}
+     * @see {@link COMPONENT_TYPE_1080I_16_9}
+     * @see {@link COMPONENT_TYPE_1080I_OVER_16_9}
+     * @see {@link COMPONENT_TYPE_240P_4_3}
+     * @see {@link COMPONENT_TYPE_240P_16_9}
+     * @see {@link COMPONENT_TYPE_240P_OVER_16_9}
+     **/
     componentType: number;
     componentTag: number;
     iso639LanguageCode: number;
@@ -1012,15 +1048,55 @@ function readComponentDescriptor(buffer: Uint8Array): ComponentDescriptor | unde
     };
 }
 
+export const STREAM_CONTENT_AUDIO = 0x2;
+
+export const AUDIO_COMPONENT_TYPE_MONO = 0x01;
+export const AUDIO_COMPONENT_TYPE_DUAL_MONO = 0x02;
+export const AUDIO_COMPONENT_TYPE_STEREO = 0x03;
+export const AUDIO_COMPONENT_TYPE_3_1 = 0x07;
+export const AUDIO_COMPONENT_TYPE_3_2 = 0x08;
+export const AUDIO_COMPONENT_TYPE_5POINT1 = 0x09;
+
+export const QUALITY_INDICATOR_MODE1 = 0b01;
+export const QUALITY_INDICATOR_MODE2 = 0b10;
+export const QUALITY_INDICATOR_MODE3 = 0b11;
+
+export const SAMPLING_RATE_24000 = 0b011;
+export const SAMPLING_RATE_32000 = 0b101;
+export const SAMPLING_RATE_48000 = 0b111;
+
+export const STREAM_TYPE_ADTS_AAC = 0x0f;
+export const STREAM_TYPE_LATM_LOAS = 0x11;
+
 export type AudioComponentDescriptor = {
     tag: "audioComponent";
+    /** @see {@link STREAM_CONTENT_AUDIO} */
     streamContent: number;
+    /**
+     * @see {@link AUDIO_COMPONENT_TYPE_MONO}
+     * @see {@link AUDIO_COMPONENT_TYPE_DUAL_MONO}
+     * @see {@link AUDIO_COMPONENT_TYPE_STEREO}
+     * @see {@link AUDIO_COMPONENT_TYPE_3_1}
+     * @see {@link AUDIO_COMPONENT_TYPE_3_2}
+     * @see {@link AUDIO_COMPONENT_TYPE_5POINT1}
+     **/
     componentType: number;
     componentTag: number;
+    /** @see {@link STREAM_TYPE_ADTS_AAC} */
     streamType: number;
     simulcastGroupTag: number;
     mainComponentFlag: boolean;
+    /**
+     * @see {@link QUALITY_INDICATOR_MODE1}
+     * @see {@link QUALITY_INDICATOR_MODE2}
+     * @see {@link QUALITY_INDICATOR_MODE3}
+     */
     qualityIndicator: number;
+    /**
+     * @see {@link SAMPLING_RATE_24000}
+     * @see {@link SAMPLING_RATE_32000}
+     * @see {@link SAMPLING_RATE_48000}
+     */
     samplingRate: number;
     iso639LanguageCode: number;
     esMultiLingualISO639LanguageCode?: number;

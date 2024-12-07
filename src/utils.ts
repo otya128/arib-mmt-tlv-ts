@@ -131,6 +131,18 @@ export function mjdBCDToUnixEpoch(mjdbcd: number): number {
     return mjdToUnixEpoch(mjd) + bcdTimeToSeconds(mjdbcd) - 3600 * 9; /* JST (UTC+9) offset */
 }
 
+export function bcdToBinary(bcd: number) {
+    const a = (bcd >>> 28) & 0xf;
+    const b = (bcd >>> 24) & 0xf;
+    const c = (bcd >>> 20) & 0xf;
+    const d = (bcd >>> 16) & 0xf;
+    const e = (bcd >>> 12) & 0xf;
+    const f = (bcd >>> 8) & 0xf;
+    const g = (bcd >>> 4) & 0xf;
+    const h = bcd & 0xf;
+    return a * 10000000 + b * 1000000 + c * 100000 + d * 10000 + e * 1000 + f * 100 + g * 10 + h;
+}
+
 export function ipv4ToString(address: ArrayLike<number>): string {
     return `${address[0]}.${address[1]}.${address[2]}.${address[3]}`;
 }

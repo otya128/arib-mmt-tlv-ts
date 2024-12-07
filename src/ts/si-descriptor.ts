@@ -11,6 +11,9 @@ import {
     readSystemManagementDescriptor,
     readSatelliteDeliverySystemDescriptor,
     SatelliteDeliverySystemDescriptor,
+    readChannelBondingCableDeliverySystemDescriptor,
+    ChannelBondingCableDeliverySystemDescriptor,
+    ChannelBondingCableCarrier,
 } from "../si-descriptor";
 export {
     EmergencyInformationDescriptor,
@@ -19,6 +22,8 @@ export {
     ServiceListEntry,
     SystemManagementDescriptor,
     SatelliteDeliverySystemDescriptor,
+    ChannelBondingCableDeliverySystemDescriptor,
+    ChannelBondingCableCarrier,
 };
 
 export type Descriptor =
@@ -58,6 +63,8 @@ export type Descriptor =
     | SeriesDescriptor
     | ExtendedEventDescriptor
     | LocalTimeOffsetDescriptor
+    | CableDeliverySystemDescriptor
+    | ChannelBondingCableDeliverySystemDescriptor
     | StuffingDescriptor;
 
 export const CA_DESCRIPTOR = 0x09;
@@ -96,6 +103,8 @@ export const COMPONENT_GROUP_DESCRIPTOR = 0xd9;
 export const SERIES_DESCRIPTOR = 0xd5;
 export const EXTENDED_EVENT_DESCRIPTOR = 0x4e;
 export const LOCAL_TIME_OFFSET_DESCRIPTOR = 0x58;
+export const CABLE_DELIVERY_SYSTEM_DESCRIPTOR = 0x44;
+export const CHANNEL_BONDING_CABLE_DELIVERY_SYSTEM_DESCRIPTOR = 0xf3;
 export const STUFFING_DESCRIPTOR = 0x42;
 
 export function readDescriptors(buffer: Uint8Array): Descriptor[] {
@@ -217,6 +226,12 @@ export function readDescriptors(buffer: Uint8Array): Descriptor[] {
                 break;
             case LOCAL_TIME_OFFSET_DESCRIPTOR:
                 desc = readLocalTimeOffsetDescriptor(payload);
+                break;
+            case CABLE_DELIVERY_SYSTEM_DESCRIPTOR:
+                desc = readCableDeliverySystemDescriptor(payload);
+                break;
+            case CHANNEL_BONDING_CABLE_DELIVERY_SYSTEM_DESCRIPTOR:
+                desc = readChannelBondingCableDeliverySystemDescriptor(payload);
                 break;
             case STUFFING_DESCRIPTOR:
                 desc = readStuffingDescriptor(payload);
@@ -1464,6 +1479,43 @@ function readLocalTimeOffsetDescriptor(buffer: Uint8Array): LocalTimeOffsetDescr
     return {
         tag: "localTimeOffset",
         offsets,
+    };
+}
+
+export type CableDeliverySystemDescriptor = {
+    tag: "cableDeliverySystemDescriptor";
+    frequency: number;
+    frameType: number;
+    fecOuter: number;
+    modulation: number;
+    symbolRate: number;
+    fecInner: number;
+};
+
+function readCableDeliverySystemDescriptor(
+    buffer: Uint8Array
+): CableDeliverySystemDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(4 + 1 + 1 + 1 + 4)) {
+        return undefined;
+    }
+    const frequency = reader.readUint32();
+    reader.skip(1);
+    const h = reader.readUint8();
+    const frameType = h >> 4;
+    const fecOuter = h & 0xf;
+    const modulation = reader.readUint8();
+    const h2 = reader.readUint32();
+    const symbolRate = h2 >>> 4;
+    const fecInner = h2 & 0xf;
+    return {
+        tag: "cableDeliverySystemDescriptor",
+        frequency,
+        frameType,
+        fecOuter,
+        modulation,
+        symbolRate,
+        fecInner,
     };
 }
 

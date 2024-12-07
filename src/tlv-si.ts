@@ -4,10 +4,13 @@ import {
     ServiceListDescriptor,
     ServiceListEntry,
     SatelliteDeliverySystemDescriptor,
+    ChannelBondingCableDeliverySystemDescriptor,
+    ChannelBondingCableCarrier,
     readNetworkNameDescriptor,
     readSystemManagementDescriptor,
     readServiceListDescriptor,
     readSatelliteDeliverySystemDescriptor,
+    readChannelBondingCableDeliverySystemDescriptor,
 } from "./si-descriptor";
 export {
     NetworkNameDescriptor,
@@ -15,25 +18,30 @@ export {
     ServiceListDescriptor,
     ServiceListEntry,
     SatelliteDeliverySystemDescriptor,
+    ChannelBondingCableDeliverySystemDescriptor,
+    ChannelBondingCableCarrier,
 };
 import { TLV_HEADER_SIZE } from "./tlv";
 import { BinaryReader } from "./utils";
 
 export const TLV_SI_NIT_ACTUAL = 0x40;
+export const TLV_SI_NIT_OTHER = 0x41;
+export const TLV_SI_AMT = 0xfe;
+
 export const TLV_SI_NETWORK_NAME_DESCRIPTOR = 0x40;
 export const TLV_SI_SYSTEM_MANAGEMENT_DESCRIPTOR = 0xfe;
 export const TLV_SI_REMOTE_CONTROL_KEY_DESCRIPTOR = 0xcd;
 export const TLV_SI_SERVICE_LIST_DESCRIPTOR = 0x41;
 export const TLV_SI_SATELLITE_DELIVERY_SYSTEM_DESCRIPTOR = 0x43;
-export const TLV_SI_NIT_OTHER = 0x41;
-export const TLV_SI_AMT = 0xfe;
+export const TLV_SI_CHANNEL_BONDING_CABLE_DELIVERY_SYSTEM_DESCRIPTOR = 0xf3;
 
 export type TLVSIDescriptor =
     | NetworkNameDescriptor
     | SystemManagementDescriptor
     | RemoteControlKeyDescriptor
     | ServiceListDescriptor
-    | SatelliteDeliverySystemDescriptor;
+    | SatelliteDeliverySystemDescriptor
+    | ChannelBondingCableDeliverySystemDescriptor;
 
 export type RemoteControlKeyDescriptor = {
     tag: "remoteControlKey";
@@ -152,6 +160,13 @@ export function readDescriptors(buffer: Uint8Array): TLVSIDescriptor[] {
             }
             case TLV_SI_SATELLITE_DELIVERY_SYSTEM_DESCRIPTOR: {
                 const d = readSatelliteDeliverySystemDescriptor(data);
+                if (d != null) {
+                    descriptors.push(d);
+                }
+                break;
+            }
+            case TLV_SI_CHANNEL_BONDING_CABLE_DELIVERY_SYSTEM_DESCRIPTOR: {
+                const d = readChannelBondingCableDeliverySystemDescriptor(data);
                 if (d != null) {
                     descriptors.push(d);
                 }

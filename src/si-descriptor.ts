@@ -135,3 +135,50 @@ export function readSatelliteDeliverySystemDescriptor(
         fecInner: view.getUint32(7) & 0xf,
     };
 }
+
+export type ChannelBondingCableDeliverySystemDescriptor = {
+    tag: "channelBondingCableDeliverySystem";
+    carriers: ChannelBondingCableCarrier[];
+};
+
+export type ChannelBondingCableCarrier = {
+    frequency: number;
+    frameType: number;
+    fecOuter: number;
+    modulation: number;
+    symbolRate: number;
+    fecInner: number;
+    groupId: number;
+};
+
+export function readChannelBondingCableDeliverySystemDescriptor(
+    buffer: Uint8Array
+): ChannelBondingCableDeliverySystemDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    const carriers: ChannelBondingCableCarrier[] = [];
+    while (reader.canRead(4 + 1 + 1 + 1 + 4 + 1)) {
+        const frequency = reader.readUint32();
+        reader.skip(1);
+        const h = reader.readUint8();
+        const frameType = h >> 4;
+        const fecOuter = h & 0xf;
+        const modulation = reader.readUint8();
+        const h2 = reader.readUint32();
+        const symbolRate = h2 >>> 4;
+        const fecInner = h2 & 0xf;
+        const groupId = reader.readUint8();
+        carriers.push({
+            frequency,
+            frameType,
+            fecOuter,
+            modulation,
+            symbolRate,
+            fecInner,
+            groupId,
+        });
+    }
+    return {
+        tag: "channelBondingCableDeliverySystem",
+        carriers,
+    };
+}

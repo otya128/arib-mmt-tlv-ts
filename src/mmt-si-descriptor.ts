@@ -92,118 +92,123 @@ export function readMMTSIDescriptors(buffer: Uint8Array): MMTSIDescriptor[] {
     while (reader.canRead(2 + 1)) {
         const descriptorTag = reader.readUint16();
         let descriptor: MMTSIDescriptor | undefined;
+        let lengthBytes: number;
+        let descriptorLength: number;
+        if ((descriptorTag >= 0x4000 && descriptorTag <= 0x6fff) || descriptorTag >= 0xf000) {
+            lengthBytes = 2;
+        } else if (descriptorTag >= 0x7000 && descriptorTag <= 0x7fff) {
+            lengthBytes = 4;
+        } else {
+            lengthBytes = 1;
+        }
+        switch (lengthBytes) {
+            case 4:
+                descriptorLength = reader.readUint32();
+                break;
+            case 2:
+                descriptorLength = reader.readUint16();
+                break;
+            default:
+                descriptorLength = reader.readUint8();
+                break;
+        }
+        if (!reader.canRead(descriptorLength)) {
+            break;
+        }
+        const desc = reader.subarray(descriptorLength);
         switch (descriptorTag) {
-            case MMT_SI_MH_SHORT_EVENT_DESCRIPTOR: {
-                const descriptorLength = reader.readUint16();
-                if (!reader.canRead(descriptorLength)) {
-                    return descriptors;
-                }
-                const desc = reader.subarray(descriptorLength);
+            case MMT_SI_ACESS_CONTROL_DESCRIPTOR:
+                descriptor = readAccessControlDescriptor(desc);
+                break;
+            case MMT_SI_CONTENT_COPY_CONTROL_DESCRIPTOR:
+                descriptor = readContentCopyControlDescriptor(desc);
+                break;
+            case MMT_SI_EMERGENCY_INFORMATION_DESCRIPTOR:
+                descriptor = readEmergencyInformationDescriptor(desc);
+                break;
+            case MMT_SI_EMERGENCY_NEWS_DESCRIPTOR:
+                descriptor = readEmergencyNewsDescriptor(desc);
+                break;
+            case MMT_SI_CONTENT_USAGE_CONTROL_DESCRIPTOR:
+                descriptor = readContentUsageControlDescriptor(desc);
+                break;
+            case MMT_SI_MH_PARENTAL_RATING_DESCRIPTOR:
+                descriptor = readMHParentalRatingDescriptor(desc);
+                break;
+            case MMT_SI_APPLICATION_SERVICE_DESCRIPTOR:
+                descriptor = readApplicationServiceDescriptor(desc);
+                break;
+            case MMT_SI_ASSET_GROUP_DESCRIPTOR:
+                descriptor = readAssetGroupDescriptor(desc);
+                break;
+            case MMT_SI_MPU_TIMESTAMP_DESCRIPTOR:
+                descriptor = readMPUTimestampDescriptor(desc);
+                break;
+            case MMT_SI_MH_HIERARCHY_DESCRIPTOR:
+                descriptor = readMHHierarchyDescriptor(desc);
+                break;
+            case MMT_SI_VIDEO_COMPONENT_DESCRIPTOR:
+                descriptor = readVideoComponentDescriptor(desc);
+                break;
+            case MMT_SI_MH_STREAM_IDENTIFIER_DESCRIPTOR:
+                descriptor = readMHStreamIdentifierDescriptor(desc);
+                break;
+            case MMT_SI_MH_AUDIO_COMPONENT_DESCRIPTOR:
+                descriptor = readMHAudioComponentDescriptor(desc);
+                break;
+            case MMT_SI_MH_TARGET_REGION_DESCRIPTOR:
+                descriptor = readMHTargetRegionDescriptor(desc);
+                break;
+            case MMT_SI_MH_DATA_COMPONENT_DESCRIPTOR:
+                descriptor = readMHDataComponentDescriptor(desc);
+                break;
+            case MMT_SI_MPU_EXTENDED_TIMESTAMP_DESCRIPTOR:
+                descriptor = readMPUExtendedTimestampDescriptor(desc);
+                break;
+            case MMT_SI_MH_EVENT_GROUP_DESCRIPTOR:
+                descriptor = readMHEventGroupDescriptor(desc);
+                break;
+            case MMT_SI_MH_CONTENT_DESCRIPTOR:
+                descriptor = readMHContentDescriptor(desc);
+                break;
+            case MMT_SI_MH_SERIES_DESCRIPTOR:
+                descriptor = readMHSeriesDescriptor(desc);
+                break;
+            case MMT_SI_MULTIMEDIA_SERVICE_INFO_DESCRIPTOR:
+                descriptor = readMultimediaServiceInfoDescriptor(desc);
+                break;
+            case MMT_SI_MH_SERVICE_DESCRIPTOR:
+                descriptor = readMHServiceDescriptor(desc);
+                break;
+            case MMT_SI_MH_CA_CONTRACT_INFO_DESCRIPTOR:
+                descriptor = readMHCAContractInfoDescriptor(desc);
+                break;
+            case MMT_SI_MH_LOGO_TRANSMISSION_DESCRIPTOR:
+                descriptor = readMHLogoTransmissionDescriptor(desc);
+                break;
+            case MMT_SI_MH_SI_PARAMETER_DESCRIPTOR:
+                descriptor = readMHSIParameterDescriptor(desc);
+                break;
+            case MMT_SI_MH_BROADCASTER_NAME_DESCRIPTOR:
+                descriptor = readMHBroadcasterNameDescriptor(desc);
+                break;
+            case MMT_SI_MH_SERVICE_LIST_DESCRIPTOR:
+                descriptor = readMHServiceListDescriptor(desc);
+                break;
+            case MMT_SI_RELATED_BROADCASTER_DESCRIPTOR:
+                descriptor = readSIRelatedBroadcasterDescriptor(desc);
+                break;
+            case MMT_SI_MH_LOCAL_TIME_OFFSET_DESCRIPTOR:
+                descriptor = readMHLocalTimeOffsetDescriptor(desc);
+                break;
+            case MMT_SI_MH_SHORT_EVENT_DESCRIPTOR:
                 descriptor = readMHShortEventDescriptor(desc);
                 break;
-            }
-            case MMT_SI_MH_EXTENDED_EVENT_DESCRIPTOR: {
-                const descriptorLength = reader.readUint16();
-                if (!reader.canRead(descriptorLength)) {
-                    return descriptors;
-                }
-                const desc = reader.subarray(descriptorLength);
+            case MMT_SI_MH_EXTENDED_EVENT_DESCRIPTOR:
                 descriptor = readMHExtendedEventDescriptor(desc);
                 break;
-            }
-            default: {
-                const descriptorLength = reader.readUint8();
-                if (!reader.canRead(descriptorLength)) {
-                    return descriptors;
-                }
-                const desc = reader.subarray(descriptorLength);
-                switch (descriptorTag) {
-                    case MMT_SI_ACESS_CONTROL_DESCRIPTOR:
-                        descriptor = readAccessControlDescriptor(desc);
-                        break;
-                    case MMT_SI_CONTENT_COPY_CONTROL_DESCRIPTOR:
-                        descriptor = readContentCopyControlDescriptor(desc);
-                        break;
-                    case MMT_SI_EMERGENCY_INFORMATION_DESCRIPTOR:
-                        descriptor = readEmergencyInformationDescriptor(desc);
-                        break;
-                    case MMT_SI_EMERGENCY_NEWS_DESCRIPTOR:
-                        descriptor = readEmergencyNewsDescriptor(desc);
-                        break;
-                    case MMT_SI_CONTENT_USAGE_CONTROL_DESCRIPTOR:
-                        descriptor = readContentUsageControlDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_PARENTAL_RATING_DESCRIPTOR:
-                        descriptor = readMHParentalRatingDescriptor(desc);
-                        break;
-                    case MMT_SI_APPLICATION_SERVICE_DESCRIPTOR:
-                        descriptor = readApplicationServiceDescriptor(desc);
-                        break;
-                    case MMT_SI_ASSET_GROUP_DESCRIPTOR:
-                        descriptor = readAssetGroupDescriptor(desc);
-                        break;
-                    case MMT_SI_MPU_TIMESTAMP_DESCRIPTOR:
-                        descriptor = readMPUTimestampDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_HIERARCHY_DESCRIPTOR:
-                        descriptor = readMHHierarchyDescriptor(desc);
-                        break;
-                    case MMT_SI_VIDEO_COMPONENT_DESCRIPTOR:
-                        descriptor = readVideoComponentDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_STREAM_IDENTIFIER_DESCRIPTOR:
-                        descriptor = readMHStreamIdentifierDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_AUDIO_COMPONENT_DESCRIPTOR:
-                        descriptor = readMHAudioComponentDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_TARGET_REGION_DESCRIPTOR:
-                        descriptor = readMHTargetRegionDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_DATA_COMPONENT_DESCRIPTOR:
-                        descriptor = readMHDataComponentDescriptor(desc);
-                        break;
-                    case MMT_SI_MPU_EXTENDED_TIMESTAMP_DESCRIPTOR:
-                        descriptor = readMPUExtendedTimestampDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_EVENT_GROUP_DESCRIPTOR:
-                        descriptor = readMHEventGroupDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_CONTENT_DESCRIPTOR:
-                        descriptor = readMHContentDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_SERIES_DESCRIPTOR:
-                        descriptor = readMHSeriesDescriptor(desc);
-                        break;
-                    case MMT_SI_MULTIMEDIA_SERVICE_INFO_DESCRIPTOR:
-                        descriptor = readMultimediaServiceInfoDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_SERVICE_DESCRIPTOR:
-                        descriptor = readMHServiceDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_CA_CONTRACT_INFO_DESCRIPTOR:
-                        descriptor = readMHCAContractInfoDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_LOGO_TRANSMISSION_DESCRIPTOR:
-                        descriptor = readMHLogoTransmissionDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_SI_PARAMETER_DESCRIPTOR:
-                        descriptor = readMHSIParameterDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_BROADCASTER_NAME_DESCRIPTOR:
-                        descriptor = readMHBroadcasterNameDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_SERVICE_LIST_DESCRIPTOR:
-                        descriptor = readMHServiceListDescriptor(desc);
-                        break;
-                    case MMT_SI_RELATED_BROADCASTER_DESCRIPTOR:
-                        descriptor = readSIRelatedBroadcasterDescriptor(desc);
-                        break;
-                    case MMT_SI_MH_LOCAL_TIME_OFFSET_DESCRIPTOR:
-                        descriptor = readMHLocalTimeOffsetDescriptor(desc);
-                        break;
-                }
-            }
+            default:
+                continue;
         }
         if (descriptor != null) {
             descriptors.push(descriptor);

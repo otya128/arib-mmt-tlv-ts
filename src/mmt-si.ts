@@ -35,7 +35,7 @@ export const MMT_ASSET_TYPE_MP4A = fourCC("mp4a");
 export const MMT_ASSET_TYPE_TIMED_TEXT = fourCC("stpp");
 export const MMT_ASSET_TYPE_APPLICATION = fourCC("aapp");
 
-export type Message = PAMessage | M2sectionMessage | M2shortSectionMessage;
+export type Message = PAMessage | M2sectionMessage | M2shortSectionMessage | CAMessage;
 
 export function readMessages(buffer: Uint8Array): Message | undefined {
     const reader = new BinaryReader(buffer);
@@ -80,6 +80,7 @@ export function readMessages(buffer: Uint8Array): Message | undefined {
                 break;
             }
             const payload = reader.subarray(length);
+            message = readCAMessage(version, payload);
             break;
         }
         case MMT_SI_M2_SHORT_SECTION_MESSAGE: {
@@ -592,6 +593,55 @@ function readM2shortSectionMessage(
         messageId: "M2shortSection",
         version,
         table,
+    };
+}
+
+export type CAMessage = {
+    messageId: "CAT";
+    version: number;
+    table: ConditionalAccessTable;
+};
+
+export type ConditionalAccessTable = {
+    tableId: "CAT";
+    version: number;
+    descriptors: MMTSIDescriptor[];
+};
+
+function readCAMessage(version: number, buffer: Uint8Array): CAMessage | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(1 + 1 + 2)) {
+        return undefined;
+    }
+    const tableId = reader.readUint8();
+    const tableVersion = reader.readUint8();
+    const length = reader.readUint16();
+    if (!reader.canRead(length)) {
+        return undefined;
+    }
+    const payload = reader.subarray(length);
+    let table: ConditionalAccessTable | undefined;
+    switch (tableId) {
+        case MMT_SI_TABLE_CAT:
+            table = readConditionalAccessTable(tableVersion, payload);
+            break;
+    }
+    if (table == null) {
+        return undefined;
+    }
+    return {
+        messageId: "CAT",
+        version,
+        table,
+    };
+}
+
+function readConditionalAccessTable(version: number, payload: Uint8Array): ConditionalAccessTable {
+    const descriptors = readMMTSIDescriptors(payload);
+    return {
+        tableId: "CAT",
+        version,
+        descriptors,
     };
 }
 

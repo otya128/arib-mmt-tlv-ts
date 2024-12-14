@@ -84,7 +84,8 @@ export type MMTSIDescriptor =
     | MHBroadcasterNameDescriptor
     | MHServiceListDescriptor
     | SIRelatedBroadcasterDescriptor
-    | MHLocalTimeOffsetDescriptor;
+    | MHLocalTimeOffsetDescriptor
+    | ScramblerDescriptor;
 
 export function readMMTSIDescriptors(buffer: Uint8Array): MMTSIDescriptor[] {
     const reader = new BinaryReader(buffer);
@@ -206,6 +207,9 @@ export function readMMTSIDescriptors(buffer: Uint8Array): MMTSIDescriptor[] {
                 break;
             case MMT_SI_MH_EXTENDED_EVENT_DESCRIPTOR:
                 descriptor = readMHExtendedEventDescriptor(desc);
+                break;
+            case MMT_SI_SCRAMBLER_DESCRIPTOR:
+                descriptor = readScramblerDescriptor(desc);
                 break;
             default:
                 continue;
@@ -1631,5 +1635,27 @@ function readMHLocalTimeOffsetDescriptor(
     return {
         tag: "mhLocalTimeOffset",
         offsets,
+    };
+}
+
+export type ScramblerDescriptor = {
+    tag: "scrambler";
+    layerType: number;
+    scrambleSystemId: number;
+    privateData: Uint8Array;
+};
+
+function readScramblerDescriptor(buffer: Uint8Array): ScramblerDescriptor | undefined {
+    if (buffer.length < 2) {
+        return undefined;
+    }
+    const layerType = buffer[0] >> 6;
+    const scrambleSystemId = buffer[1];
+    const privateData = buffer.slice(2);
+    return {
+        tag: "scrambler",
+        layerType,
+        scrambleSystemId,
+        privateData,
     };
 }

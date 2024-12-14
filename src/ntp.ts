@@ -69,7 +69,7 @@ export function readNTPPacket(payload: Uint8Array): NTPPacket | undefined {
 }
 
 export function ntp64TimestampToDate({ seconds, fractional }: NTP64Timestamp) {
-    return new Date((seconds + fractional * Math.pow(2, -32)) * 1000);
+    return new Date((seconds + fractional * Math.pow(2, -32) - 2208988800) * 1000);
 }
 
 export function ntp64TimestampToSeconds({ seconds, fractional }: NTP64Timestamp): number {

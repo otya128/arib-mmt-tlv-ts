@@ -11,6 +11,7 @@ import {
 } from "./mmt-si";
 import { MediaProcessingUnit } from "./mpu";
 import { NTPPacket } from "./ntp";
+import { TLVContext } from "./tlv";
 import { TLVNetworkInformationTable } from "./tlv-si";
 
 export interface MMTTLVReaderEventMap {
@@ -24,6 +25,9 @@ export interface MMTTLVReaderEventMap {
     mpt: MMTSIEvent<MMTPackageTable>;
     mpu: MediaProcessingUnitEvent;
     ntp: NTPEvent;
+    tlvDiscontinuity: TLVDiscontinuityEvent;
+    mmtDiscontinuity: MMTDiscontinuityEvent;
+    scrambled: ScrambledEvent;
 }
 
 export type MMTTLVReaderEventTarget = CustomEventTarget<MMTTLVReaderEventMap>;
@@ -35,3 +39,22 @@ export type TLVSIEvent<T> = { table: T };
 export type MediaProcessingUnitEvent = { mmtHeader: MMTHeader; mpu: MediaProcessingUnit };
 
 export type NTPEvent = { offset: number; ntp: NTPPacket };
+
+export type TLVDiscontinuityEvent = {
+    context: TLVContext;
+    expected: number;
+    actual: number;
+    packetId?: number;
+};
+
+export type ScrambledEvent = {
+    packetId: number;
+    context: TLVContext;
+};
+
+export type MMTDiscontinuityEvent = {
+    packetId: number;
+    expected: number;
+    actual: number;
+    context: TLVContext;
+};

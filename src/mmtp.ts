@@ -393,9 +393,6 @@ export class MMTPReader {
             }
         }
         if (payloadType === MMTP_PAYLOAD_TYPE_MPU) {
-            if (this.eventTarget.getListenerCount("mpu") === 0) {
-                return;
-            }
             if (!reader.canRead(2)) {
                 return;
             }
@@ -452,6 +449,9 @@ export class MMTPReader {
                 }
             }
             if (scrambled) {
+                return;
+            }
+            if (this.eventTarget.getListenerCount("mpu") === 0) {
                 return;
             }
             const mpu = readMPU(payload);

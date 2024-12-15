@@ -115,7 +115,7 @@ export class MMTPReader {
             this.assets.set(pid, {
                 packetSequenceNumber: undefined,
                 fragmentIndicator: undefined,
-                referencedPackages: new Set(),
+                referencedPackages: new Set([pid]),
                 packetCount: 0,
                 dropPacketCount: 0,
                 scrambledPacketCount: 0,

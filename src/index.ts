@@ -141,19 +141,20 @@ export class MMTTLVReader {
         this.bytes_ += block.length;
         buffer.set(block, this.buffer.length);
         this.buffer = buffer;
-        while (this.buffer.length !== 0) {
-            const [consumed, tlvPacket] = process(this.buffer);
-            if (consumed === 0) {
+        let packetOffset = 0;
+        while (this.buffer.length > packetOffset) {
+            const [nextPacketOffset, tlvPacket] = process(this.buffer, packetOffset);
+            if (nextPacketOffset === packetOffset) {
                 break;
             }
-            this.buffer = this.buffer.subarray(consumed);
+            packetOffset = nextPacketOffset;
             if (tlvPacket != null) {
                 const packetType = tlvPacket[1];
                 if (packetType === TLV_PACKET_TYPE_SI) {
                     this.onSI(tlvPacket);
                 }
                 if (packetType === TLV_PACKET_TYPE_IPV6) {
-                    // NTP (clock reference)]
+                    // NTP (clock reference)
                     this.processNTP(offset + tlvPacket.byteOffset, tlvPacket);
                 }
                 if (packetType === TLV_PACKET_TYPE_COMPRESSED) {
@@ -231,11 +232,12 @@ export class MMTTLVReader {
                 }
             }
         }
+        this.buffer = this.buffer.subarray(packetOffset);
     }
 }
 
-function process(buffer: Uint8Array): [number, Uint8Array | undefined] {
-    const syncIndex = buffer.indexOf(TLV_SYNC_BYTE);
+function process(buffer: Uint8Array, packetOffset: number): [number, Uint8Array | undefined] {
+    const syncIndex = buffer.indexOf(TLV_SYNC_BYTE, packetOffset);
     if (syncIndex === -1) {
         return [buffer.length, undefined];
     }

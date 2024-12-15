@@ -364,9 +364,6 @@ export class MMTPReader {
             for (let i = 0; extensionType == 0x0000 && i + 4 <= ext.length; ) {
                 const hdr = (ext[i] << 8) | ext[i + 1];
                 const hdrExtEndFlag = !!(hdr >> 15);
-                if (hdrExtEndFlag) {
-                    break;
-                }
                 const hdrExtType = hdr & 0x7fff;
                 const hdrExtLength = (ext[i + 2] << 8) | ext[i + 3];
                 i += 4;
@@ -390,6 +387,9 @@ export class MMTPReader {
                         break;
                 }
                 i += hdrExtLength;
+                if (hdrExtEndFlag) {
+                    break;
+                }
             }
         }
         if (payloadType === MMTP_PAYLOAD_TYPE_MPU) {

@@ -37,10 +37,10 @@ export class BinaryReader {
         this.offset += 5;
         return h * 256 + l;
     }
-    readNTP64Timestamp(): NTP64Timestamp {
+    readNTP64Timestamp(fix2036 = true): NTP64Timestamp {
         const seconds = this.readUint32();
         const fractional = this.readUint32();
-        if (seconds & (1 << 31)) {
+        if (!fix2036 || seconds & (1 << 31)) {
             return {
                 seconds,
                 fractional,
@@ -100,6 +100,10 @@ export function fourCC(c: string): number {
     const c2 = c.charCodeAt(2) & 255;
     const c3 = c.charCodeAt(3) & 255;
     return (c0 << 24) | (c1 << 16) | (c2 << 8) | c3;
+}
+
+export function fourCCToString(c: number): string {
+    return String.fromCharCode((c >>> 24) & 255, (c >>> 16) & 255, (c >>> 8) & 255, c & 255);
 }
 
 export function threeCC(c: string): number {

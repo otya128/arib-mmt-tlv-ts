@@ -35,7 +35,12 @@ export const MMT_ASSET_TYPE_MP4A = fourCC("mp4a");
 export const MMT_ASSET_TYPE_TIMED_TEXT = fourCC("stpp");
 export const MMT_ASSET_TYPE_APPLICATION = fourCC("aapp");
 
-export type Message = PAMessage | M2sectionMessage | M2shortSectionMessage | CAMessage;
+export type Message =
+    | PAMessage
+    | M2sectionMessage
+    | M2shortSectionMessage
+    | CAMessage
+    | DataTransmissionMessage;
 
 export function readMessages(buffer: Uint8Array): Message | undefined {
     const reader = new BinaryReader(buffer);
@@ -104,6 +109,7 @@ export function readMessages(buffer: Uint8Array): Message | undefined {
                 break;
             }
             const payload = reader.subarray(length);
+            message = readDataTransmissionMessage(version, payload);
             break;
         }
     }
@@ -150,7 +156,9 @@ export type M2Section =
     // | MHSoftwareDownloadTriggerTable
     | MHServiceDescriptionTable
     | MHCommonDataTable
-    | MHBroadcasterInformationTable;
+    | MHBroadcasterInformationTable
+    | MHApplicationInformationTable
+    | EventMessageTable;
 
 function readM2sectionMessage(version: number, buffer: Uint8Array): M2sectionMessage | undefined {
     const reader = new BinaryReader(buffer);
@@ -186,6 +194,12 @@ function readM2sectionMessage(version: number, buffer: Uint8Array): M2sectionMes
             break;
         case MMT_SI_TABLE_MH_CDT:
             table = readMHCommonDataTable(tableId, payload);
+            break;
+        case MMT_SI_TABLE_MH_AIT:
+            table = readMHApplicationInformationTable(tableId, payload);
+            break;
+        case MMT_SI_TABLE_EMT:
+            table = readEventMessageTable(tableId, payload);
             break;
     }
     if (
@@ -553,6 +567,134 @@ function readMHBroadcasterInformationTable(
     };
 }
 
+export const APPLICATION_TYPE_ARIB_HTML5 = 0x0011;
+
+export type MHApplicationInformationTable = {
+    tableId: "AIT";
+    /** @see {@link APPLICATION_TYPE_ARIB_HTML5} */
+    applicationType: number;
+    versionNumber: number;
+    currentNextIndicator: boolean;
+    /** always 0 */
+    sectionNumber: number;
+    /** always 0 */
+    lastSectionNumber: number;
+    /** unused */
+    commonDescriptors: MMTSIDescriptor[];
+    applications: MHApplication[];
+};
+
+export const APPLICATION_CONTROL_CODE_AUTOSTART = 0x01;
+export const APPLICATION_CONTROL_CODE_PRESENT = 0x02;
+export const APPLICATION_CONTROL_CODE_KILL = 0x04;
+
+export type MHApplication = {
+    organizationId: number;
+    applicationId: number;
+    /**
+     * @see {@link APPLICATION_CONTROL_CODE_AUTOSTART}
+     * @see {@link APPLICATION_CONTROL_CODE_PRESENT}
+     * @see {@link APPLICATION_CONTROL_CODE_KILL}
+     */
+    applicationControlCode: number;
+    applicationDescriptors: MMTSIDescriptor[];
+};
+
+function readMHApplicationInformationTable(
+    _tableId: number,
+    buffer: Uint8Array
+): MHApplicationInformationTable | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(2 + 1 + 1 + 1 + 2)) {
+        return undefined;
+    }
+    const applicationType = reader.readUint16();
+    const b2 = reader.readUint8();
+    const versionNumber = (b2 >> 1) & 0x1f;
+    const currentNextIndicator = !!(b2 & 1);
+    const sectionNumber = reader.readUint8();
+    const lastSectionNumber = reader.readUint8();
+    const commonDescriptorLength = reader.readUint16() & 0xfff;
+    if (!reader.canRead(commonDescriptorLength)) {
+        return undefined;
+    }
+    const commonDescriptors = readMMTSIDescriptors(reader.subarray(commonDescriptorLength));
+    const applicationLoopLength = reader.readUint16() & 0xfff;
+    if (!reader.canRead(applicationLoopLength)) {
+        return undefined;
+    }
+    const areader = new BinaryReader(reader.subarray(applicationLoopLength));
+    const applications: MHApplication[] = [];
+    while (areader.canRead(2 + 4 + 1 + 2)) {
+        const organizationId = areader.readUint16();
+        const applicationId = areader.readUint32();
+        const applicationControlCode = areader.readUint8();
+        const applicationDescriptorsLength = areader.readUint16() & 0xfff;
+        if (!areader.canRead(applicationDescriptorsLength)) {
+            return undefined;
+        }
+        const applicationDescriptors = readMMTSIDescriptors(
+            areader.subarray(applicationDescriptorsLength)
+        );
+        applications.push({
+            organizationId,
+            applicationId,
+            applicationControlCode,
+            applicationDescriptors,
+        });
+    }
+    return {
+        tableId: "AIT",
+        applicationType,
+        versionNumber,
+        currentNextIndicator,
+        sectionNumber,
+        lastSectionNumber,
+        commonDescriptors,
+        applications,
+    };
+}
+
+export type EventMessageTable = {
+    tableId: "EMT";
+    dataEventId: number;
+    eventMessageGroupId: number;
+    versionNumber: number;
+    currentNextIndicator: boolean;
+    sectionNumber: number;
+    lastSectionNumber: number;
+    descriptors: MMTSIDescriptor[];
+};
+
+function readEventMessageTable(
+    _tableId: number,
+    buffer: Uint8Array
+): EventMessageTable | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(2 + 1 + 1 + 1 + 2)) {
+        return undefined;
+    }
+    const h = reader.readUint16();
+    const dataEventId = h >> 12;
+    const eventMessageGroupId = h & 0xfff;
+    const b2 = reader.readUint8();
+    const versionNumber = (b2 >> 1) & 0x1f;
+    const currentNextIndicator = !!(b2 & 1);
+    const sectionNumber = reader.readUint8();
+    const lastSectionNumber = reader.readUint8();
+    const descriptors = readMMTSIDescriptors(reader.subarray());
+    return {
+        tableId: "EMT",
+        dataEventId,
+        eventMessageGroupId,
+        versionNumber,
+        currentNextIndicator,
+        sectionNumber,
+        lastSectionNumber,
+        descriptors,
+    };
+}
+
 export type M2shortSectionMessage = {
     messageId: "M2shortSection";
     version: number;
@@ -645,17 +787,13 @@ function readConditionalAccessTable(version: number, payload: Uint8Array): Condi
     };
 }
 
-// export type DataTransmissionSection = DataDirectoryManagementTable;
+export type DataTransmissionSection = DataDirectoryManagementTable | DataAssetManagementTable;
 
 export type DataTransmissionMessage = {
-    messageId: "data";
-    /* always 0 */
+    messageId: "dataTransmission";
+    /** always 0 */
     version: number;
-    dataTransmissionSessionId: number;
-    versionNumber: number;
-    currentNextIndicator: boolean;
-    sectionNumber: number;
-    lastSectionNumber: number;
+    table: DataTransmissionSection;
 };
 
 function readDataTransmissionMessage(
@@ -663,9 +801,314 @@ function readDataTransmissionMessage(
     buffer: Uint8Array
 ): DataTransmissionMessage | undefined {
     const reader = new BinaryReader(buffer);
+    if (!reader.canRead(1 + 2)) {
+        return undefined;
+    }
+    const tableId = reader.readUint8();
+    const b1 = reader.readUint16();
+    const sectionSyntaxIndicator = !!(b1 & 0x8000);
+    if (!sectionSyntaxIndicator) {
+        return undefined;
+    }
+    const sectionLength = b1 & 0xfff;
+    if (!reader.canRead(sectionLength) || sectionLength < 4 /* CRC_32 */) {
+        return undefined;
+    }
+    const payload = reader.subarray(sectionLength - 4 /* CRC_32 */);
+    let table: DataTransmissionSection | undefined;
+    switch (tableId) {
+        case MMT_SI_TABLE_DDMT:
+            table = readDataDirectoryManagementTable(tableId, payload);
+            break;
+        case MMT_SI_TABLE_DAMT:
+            table = readDataAssetManagementTable(tableId, payload);
+            break;
+    }
+    if (table == null) {
+        return undefined;
+    }
+    return {
+        messageId: "dataTransmission",
+        version,
+        table,
+    };
+}
+
+export type DataDirectoryManagementTable = {
+    tableId: "DDMT";
+    dataTransmissionSessionId: number;
+    versionNumber: number;
+    currentNextIndicator: boolean;
+    sectionNumber: number;
+    lastSectionNumber: number;
+    baseDirectoryPath: Uint8Array;
+    directoryNodes: DataDirectoryNode[];
+};
+
+export type DataDirectoryNode = {
+    nodeTag: number;
+    directoryNodeVersion: number;
+    directoryNodePath: Uint8Array;
+    /** unused */
+    files: DataDirectoryNodeFile[];
+};
+
+export type DataDirectoryNodeFile = {
+    nodeTag: number;
+    fileName: Uint8Array;
+};
+
+function readDataDirectoryManagementTable(
+    _tableId: number,
+    buffer: Uint8Array
+): DataDirectoryManagementTable | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(1 + 1 + 1 + 1 + 1)) {
+        return undefined;
+    }
+    const dataTransmissionSessionId = reader.readUint8();
+    reader.skip(1);
+    const b2 = reader.readUint8();
+    const versionNumber = (b2 >> 1) & 0x1f;
+    const currentNextIndicator = !!(b2 & 1);
+    const sectionNumber = reader.readUint8();
+    const lastSectionNumber = reader.readUint8();
+    const baseDirectoryPathLength = reader.readUint8();
+    if (!reader.canRead(baseDirectoryPathLength)) {
+        return undefined;
+    }
+    const baseDirectoryPath = reader.slice(baseDirectoryPathLength);
     if (!reader.canRead(1)) {
         return undefined;
     }
+    const numOfDirectoryNodes = reader.readUint8();
+    const directoryNodes: DataDirectoryNode[] = [];
+    for (let j = 0; j < numOfDirectoryNodes; j++) {
+        if (!reader.canRead(2 + 1 + 1)) {
+            return undefined;
+        }
+        const nodeTag = reader.readUint16();
+        const directoryNodeVersion = reader.readUint8();
+        const directoryNodePathLength = reader.readUint8();
+        if (!reader.canRead(directoryNodePathLength)) {
+            return undefined;
+        }
+        const directoryNodePath = reader.slice(directoryNodePathLength);
+        if (!reader.canRead(2)) {
+            return undefined;
+        }
+        const numOfFiles = reader.readUint16();
+        const files: DataDirectoryNodeFile[] = [];
+        for (let k = 0; k < numOfFiles; k++) {
+            if (!reader.canRead(2 + 1)) {
+                return undefined;
+            }
+            const nodeTag = reader.readUint16();
+            const fileNameLength = reader.readUint8();
+            if (!reader.canRead(fileNameLength)) {
+                return undefined;
+            }
+            const fileName = reader.slice(fileNameLength);
+            files.push({
+                nodeTag,
+                fileName,
+            });
+        }
+        directoryNodes.push({
+            nodeTag,
+            directoryNodeVersion,
+            directoryNodePath,
+            files,
+        });
+    }
+    return {
+        tableId: "DDMT",
+        dataTransmissionSessionId,
+        versionNumber,
+        currentNextIndicator,
+        sectionNumber,
+        lastSectionNumber,
+        baseDirectoryPath,
+        directoryNodes,
+    };
+}
+
+export const DOWNLOAD_ID_DATA_EVENT_ID_SHIFT = 28;
+export const DOWNLOAD_ID_DATA_EVENT_ID_MASK = 0xf;
+
+export type DataAssetManagementTable = {
+    tableId: "DAMT";
+    dataTransmissionSessionId: number;
+    versionNumber: number;
+    currentNextIndicator: boolean;
+    sectionNumber: number;
+    lastSectionNumber: number;
+    transactionId: number;
+    componentTag: number;
+    /** dataEventId = (downloadId >>> {@link DOWNLOAD_ID_DATA_EVENT_ID_SHIFT}) & {@link DOWNLOAD_ID_DATA_EVENT_ID_MASK} */
+    downloadId: number;
+    mpus: DataAssetMPU[];
+    /** unused */
+    componentInfo: Uint8Array;
+};
+
+export const INDEX_ITEM_COMPRESSION_TYPE_ZLIB = 0b00;
+export const INDEX_ITEM_COMPRESSION_TYPE_UNCOMPRESSED = 0b11;
+
+export type DataAssetMPU = {
+    mpuSequenceNumber: number;
+    mpuSize: number;
+    /**
+     * @see {@link INDEX_ITEM_COMPRESSION_TYPE_ZLIB}
+     * @see {@link INDEX_ITEM_COMPRESSION_TYPE_UNCOMPRESSED}
+     */
+    indexItemCompressionType: number;
+    /** always undefined (0x00000000) */
+    indexItemId?: number;
+    /** unused */
+    items: DataAssetMPUNodeTag[] | DataAssetMPUItem[];
+    /** always `[{ tag: "mpuNode", nodeId: ... }]` */
+    mpuInfo: MMTSIDescriptor[];
+};
+
+export type DataAssetMPUNodeTag = {
+    nodeTag: number;
+};
+
+export type DataAssetMPUItem = {
+    nodeTag: number;
+    itemId: number;
+    itemSize: number;
+    itemVersion: number;
+    itemChecksum?: number;
+    itemInfo: Uint8Array;
+};
+
+function readDataAssetManagementTable(
+    _tableId: number,
+    buffer: Uint8Array
+): DataAssetManagementTable | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(1 + 1 + 1 + 1 + 4 + 2 + 4 + 1)) {
+        return undefined;
+    }
+    const dataTransmissionSessionId = reader.readUint8();
+    reader.skip(1);
+    const b2 = reader.readUint8();
+    const versionNumber = (b2 >> 1) & 0x1f;
+    const currentNextIndicator = !!(b2 & 1);
+    const sectionNumber = reader.readUint8();
+    const lastSectionNumber = reader.readUint8();
+    const transactionId = reader.readUint32();
+    const componentTag = reader.readUint16();
+    const downloadId = reader.readUint32();
+    const numOfMPUs = reader.readUint8();
+    const mpus: DataAssetMPU[] = [];
+    for (let j = 0; j < numOfMPUs; j++) {
+        if (!reader.canRead(4 + 4 + 1)) {
+            return undefined;
+        }
+        const mpuSequenceNumber = reader.readUint32();
+        const mpuSize = reader.readUint32();
+        const h = reader.readUint8();
+        const indexItemFlag = !!(h >> 7);
+        const indexItemIdFlag = !!((h >> 6) & 1);
+        const indexItemCompressionType = (h >> 4) & 3;
+        let indexItemId: number | undefined;
+        if (indexItemFlag && indexItemIdFlag) {
+            if (!reader.canRead(4)) {
+                return undefined;
+            }
+            indexItemId = reader.readUint32();
+        }
+        if (!reader.canRead(2)) {
+            return undefined;
+        }
+        const numOfItems = reader.readUint16();
+        const items: DataAssetMPUNodeTag[] | DataAssetMPUItem[] = [];
+        if (indexItemFlag) {
+            if (!reader.canRead(2 * numOfItems)) {
+                return undefined;
+            }
+            for (let k = 0; k < numOfItems; k++) {
+                const nodeTag = reader.readUint16();
+                (items as DataAssetMPUNodeTag[]).push({
+                    nodeTag,
+                });
+            }
+        } else {
+            for (let k = 0; k < numOfItems; k++) {
+                if (!reader.canRead(2 + 4 + 4 + 1 + 1)) {
+                    return undefined;
+                }
+                const nodeTag = reader.readUint16();
+                const itemId = reader.readUint32();
+                const itemSize = reader.readUint32();
+                const itemVersion = reader.readUint8();
+                const checksumFlag = !!(reader.readUint8() >> 7);
+                let itemChecksum: number | undefined;
+                if (checksumFlag) {
+                    if (!reader.canRead(4)) {
+                        return undefined;
+                    }
+                    itemChecksum = reader.readUint32();
+                }
+                if (!reader.canRead(1)) {
+                    return undefined;
+                }
+                const itemInfoLength = reader.readUint8();
+                if (!reader.canRead(itemInfoLength)) {
+                    return undefined;
+                }
+                const itemInfo = reader.slice(itemInfoLength);
+                (items as DataAssetMPUItem[]).push({
+                    nodeTag,
+                    itemId,
+                    itemSize,
+                    itemVersion,
+                    itemChecksum,
+                    itemInfo,
+                });
+            }
+        }
+        if (!reader.canRead(1)) {
+            return undefined;
+        }
+        const mpuInfoLength = reader.readUint8();
+        if (!reader.canRead(mpuInfoLength)) {
+            return undefined;
+        }
+        const mpuInfo = readMMTSIDescriptors(reader.slice(mpuInfoLength));
+        mpus.push({
+            mpuSequenceNumber,
+            mpuSize,
+            indexItemCompressionType,
+            indexItemId,
+            items,
+            mpuInfo,
+        });
+    }
+    if (!reader.canRead(1)) {
+        return undefined;
+    }
+    const componentInfoLength = reader.readUint8();
+    if (!reader.canRead(componentInfoLength)) {
+        return undefined;
+    }
+    const componentInfo = reader.slice(componentInfoLength);
+    return {
+        tableId: "DAMT",
+        dataTransmissionSessionId,
+        versionNumber,
+        currentNextIndicator,
+        sectionNumber,
+        lastSectionNumber,
+        transactionId,
+        componentTag,
+        downloadId,
+        mpus,
+        componentInfo,
+    };
 }
 
 export type MMTSITable = PackageListTable | MMTPackageTable;

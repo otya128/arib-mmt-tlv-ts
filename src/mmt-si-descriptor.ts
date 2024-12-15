@@ -53,6 +53,13 @@ const MMT_SI_RELATED_BROADCASTER_DESCRIPTOR = 0x803e;
 const MMT_SI_MH_LOCAL_TIME_OFFSET_DESCRIPTOR = 0x8023;
 const MMT_SI_SCRAMBLER_DESCRIPTOR = 0x8005;
 const MMT_SI_MH_CA_SERVICE_DESCRIPTOR = 0x8042;
+const MMT_SI_MH_APPLICATION_DESCRIPTOR = 0x8029;
+const MMT_SI_MH_TRANSPORT_PROTOCOL_DESCRIPTOR = 0x802a;
+const MMT_SI_MH_SIMPLE_APPLICATION_LOCATION_DESCRIPTOR = 0x802b;
+const MMT_SI_MH_APPLICATION_BOUNDARY_AND_PERMISSION_DESCRIPTOR = 0x802c;
+const MMT_SI_UTC_NPT_REFERENCE_DESCRIPTOR = 0x8021;
+const MMT_SI_EVENT_MESSAGE_DESCRIPTOR = 0xf003;
+const MMT_SI_MPU_NODE_DESCRIPTOR = 0x8035;
 
 export type MMTSIDescriptor =
     | AccessControlDescriptor
@@ -85,7 +92,14 @@ export type MMTSIDescriptor =
     | MHServiceListDescriptor
     | SIRelatedBroadcasterDescriptor
     | MHLocalTimeOffsetDescriptor
-    | ScramblerDescriptor;
+    | ScramblerDescriptor
+    | MHApplicationDescriptor
+    | MHTransportProtocolDescriptor
+    | MHSimpleApplicationLocationDescriptor
+    | MHApplicationBoundaryAndPermissionDescriptor
+    | UTCNPTReferenceDescriptor
+    | EventMessageDescriptor
+    | MPUNodeDescriptor;
 
 export function readMMTSIDescriptors(buffer: Uint8Array): MMTSIDescriptor[] {
     const reader = new BinaryReader(buffer);
@@ -210,6 +224,27 @@ export function readMMTSIDescriptors(buffer: Uint8Array): MMTSIDescriptor[] {
                 break;
             case MMT_SI_SCRAMBLER_DESCRIPTOR:
                 descriptor = readScramblerDescriptor(desc);
+                break;
+            case MMT_SI_MH_APPLICATION_DESCRIPTOR:
+                descriptor = readMHApplicationDescriptor(desc);
+                break;
+            case MMT_SI_MH_TRANSPORT_PROTOCOL_DESCRIPTOR:
+                descriptor = readMHTransportProtocolDescriptor(desc);
+                break;
+            case MMT_SI_MH_SIMPLE_APPLICATION_LOCATION_DESCRIPTOR:
+                descriptor = readMHSimpleApplicationLocationDescriptor(desc);
+                break;
+            case MMT_SI_MH_APPLICATION_BOUNDARY_AND_PERMISSION_DESCRIPTOR:
+                descriptor = readMHApplicationBoundaryAndPermissionDescriptor(desc);
+                break;
+            case MMT_SI_UTC_NPT_REFERENCE_DESCRIPTOR:
+                descriptor = readUTCNPTReferenceDescriptor(desc);
+                break;
+            case MMT_SI_EVENT_MESSAGE_DESCRIPTOR:
+                descriptor = readEventMessageDescriptor(desc);
+                break;
+            case MMT_SI_MPU_NODE_DESCRIPTOR:
+                descriptor = readMPUNodeDescriptor(desc);
                 break;
             default:
                 continue;
@@ -394,16 +429,18 @@ function readMHParentalRatingDescriptor(
     };
 }
 
+export const APPLICATION_FORMAT_ARIB_HTML5 = 0x1;
+
 export const DOCUMENT_RESOLUTION_1920_1080 = 0b0000;
 export const DOCUMENT_RESOLUTION_3840_2160 = 0b0001;
 export const DOCUMENT_RESOLUTION_7680_4320 = 0b0010;
 
 export type ApplicationServiceDescriptor = {
     tag: "applicationService";
-    /** always 1 (HTML5) */
+    /** @see {@link APPLICATION_FORMAT_ARIB_HTML5} */
     applicationFormat: number;
     documentResolution: number;
-    /** always 1  */
+    /** always true */
     defaultAITFlag: boolean;
     aitLocationInfo: MMTGeneralLocationInfo;
     dtMessageLocationInfo?: MMTGeneralLocationInfo;
@@ -1657,5 +1694,332 @@ function readScramblerDescriptor(buffer: Uint8Array): ScramblerDescriptor | unde
         layerType,
         scrambleSystemId,
         privateData,
+    };
+}
+
+export type MHApplicationDescriptor = {
+    tag: "mhApplication";
+    applicationProfiles: MHApplicationProfile[];
+    /** true */
+    serviceBoundFlag: boolean;
+    /** 0b11 */
+    visibility: number;
+    presentApplicationPriority: boolean;
+    /** 0x0ff (unspecified) */
+    applicationPriority: number;
+    transportProtocolLabel: Uint8Array;
+};
+
+export type MHApplicationProfile = {
+    /** 0x0010 */
+    applicationProfile: number;
+    /** 0x01 */
+    versionMajor: number;
+    /** 0x01 */
+    versionMinor: number;
+    /** 0x01 */
+    versionMicro: number;
+};
+
+function readMHApplicationDescriptor(buffer: Uint8Array): MHApplicationDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(1)) {
+        return undefined;
+    }
+    const applicationProfilesLength = reader.readUint8();
+    const applicationProfiles: MHApplicationProfile[] = [];
+    if (!reader.canRead(applicationProfilesLength)) {
+        return undefined;
+    }
+    for (let i = 0; i < applicationProfilesLength; i += 2 + 1 + 1 + 1) {
+        const applicationProfile = reader.readUint16();
+        const versionMajor = reader.readUint8();
+        const versionMinor = reader.readUint8();
+        const versionMicro = reader.readUint8();
+        applicationProfiles.push({
+            applicationProfile,
+            versionMajor,
+            versionMinor,
+            versionMicro,
+        });
+    }
+    if (!reader.canRead(1 + 1)) {
+        return undefined;
+    }
+    const h = reader.readUint8();
+    const serviceBoundFlag = !!(h >> 7);
+    const visibility = (h >> 5) & 3;
+    const presentApplicationPriority = !!(h & 1);
+    const applicationPriority = reader.readUint8();
+    const transportProtocolLabel = reader.slice();
+    return {
+        tag: "mhApplication",
+        applicationProfiles,
+        serviceBoundFlag,
+        visibility,
+        presentApplicationPriority,
+        applicationPriority,
+        transportProtocolLabel,
+    };
+}
+
+export const MH_TRANSPORT_PROTOCOL_ID_HTTP_HTTPS = 0x0003;
+export const MH_TRANSPORT_PROTOCOL_ID_MMT_NON_TIMED = 0x0005;
+
+export type MHTransportProtocolDescriptor = {
+    tag: "mhTransportProtocol";
+    /**
+     * @see {@link MH_TRANSPORT_PROTOCOL_ID_HTTP_HTTPS}
+     * @see {@link MH_TRANSPORT_PROTOCOL_ID_MMT_NON_TIMED}
+     */
+    protocolId: number;
+    transportProtocolLabel: number;
+    selector: Uint8Array;
+    urlSelectors?: URLSelector[];
+};
+
+export type URLSelector = {
+    urlBase: Uint8Array;
+    /** unused */
+    urlExtensions: Uint8Array[];
+};
+
+function readURLSelectors(buffer: Uint8Array): URLSelector[] | undefined {
+    const reader = new BinaryReader(buffer);
+    const selectors: URLSelector[] = [];
+    while (reader.canRead(1)) {
+        const urlBaseLength = reader.readUint8();
+        if (!reader.canRead(urlBaseLength)) {
+            return undefined;
+        }
+        const urlBase = reader.subarray(urlBaseLength);
+        if (!reader.canRead(1)) {
+            return undefined;
+        }
+        const urlExtensionCount = reader.readUint8();
+        const urlExtensions: Uint8Array[] = [];
+        for (let j = 0; j < urlExtensionCount; j++) {
+            if (!reader.canRead(1)) {
+                return undefined;
+            }
+            const urlExtensionLength = reader.readUint8();
+            if (!reader.canRead(urlExtensionLength)) {
+                return undefined;
+            }
+            const urlExtension = reader.subarray(urlExtensionLength);
+            urlExtensions.push(urlExtension);
+        }
+        selectors.push({
+            urlBase,
+            urlExtensions,
+        });
+    }
+    return selectors;
+}
+
+function readMHTransportProtocolDescriptor(
+    buffer: Uint8Array
+): MHTransportProtocolDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(2 + 1)) {
+        return undefined;
+    }
+    const protocolId = reader.readUint16();
+    const transportProtocolLabel = reader.readUint8();
+    const selector = reader.slice();
+    let urlSelectors: URLSelector[] | undefined;
+    if (
+        protocolId === MH_TRANSPORT_PROTOCOL_ID_HTTP_HTTPS ||
+        protocolId === MH_TRANSPORT_PROTOCOL_ID_MMT_NON_TIMED
+    ) {
+        urlSelectors = readURLSelectors(selector);
+    }
+    return {
+        tag: "mhTransportProtocol",
+        protocolId,
+        transportProtocolLabel,
+        selector,
+        urlSelectors,
+    };
+}
+
+export type MHSimpleApplicationLocationDescriptor = {
+    tag: "mhSimpleApplicationLocation";
+    initialPath: Uint8Array;
+};
+
+function readMHSimpleApplicationLocationDescriptor(
+    buffer: Uint8Array
+): MHSimpleApplicationLocationDescriptor {
+    return {
+        tag: "mhSimpleApplicationLocation",
+        initialPath: buffer.slice(),
+    };
+}
+
+export type MHApplicationBoundaryAndPermissionDescriptor = {
+    tag: "mhApplicationBoundaryAndPermission";
+    applicationBoundaryAndPermissions: MHApplicationBoundaryAndPermission[];
+};
+
+export type MHApplicationBoundaryAndPermission = {
+    permissionBitmaps: Uint16Array;
+    managedURLs: Uint8Array[];
+};
+
+function readMHApplicationBoundaryAndPermissionDescriptor(
+    buffer: Uint8Array
+): MHApplicationBoundaryAndPermissionDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    const applicationBoundaryAndPermissions: MHApplicationBoundaryAndPermission[] = [];
+    while (reader.canRead(1)) {
+        const permissionBitmapCount = reader.readUint8();
+        if (!reader.canRead(permissionBitmapCount * 2)) {
+            return undefined;
+        }
+        const b = reader.slice(permissionBitmapCount * 2);
+        const permissionBitmaps = new Uint16Array(b.buffer, b.byteOffset, permissionBitmapCount);
+        if (!reader.canRead(1)) {
+            return undefined;
+        }
+        const managedURLCount = reader.readUint8();
+        const managedURLs: Uint8Array[] = [];
+        for (let j = 0; j < managedURLCount; j++) {
+            if (!reader.canRead(1)) {
+                return undefined;
+            }
+            const managedURLLength = reader.readUint8();
+            if (!reader.canRead(managedURLLength)) {
+                return undefined;
+            }
+            const managedURL = reader.slice(managedURLLength);
+            managedURLs.push(managedURL);
+        }
+        applicationBoundaryAndPermissions.push({
+            permissionBitmaps,
+            managedURLs,
+        });
+    }
+    return {
+        tag: "mhApplicationBoundaryAndPermission",
+        applicationBoundaryAndPermissions,
+    };
+}
+
+export const UTC_NPT_REFERENCE_SCALE_SAME = 0b11;
+
+export type UTCNPTReferenceDescriptor = {
+    tag: "utcNPTReference";
+    utcReference: NTP64Timestamp;
+    nptReference: NTP64Timestamp;
+    utcNPTLeapIndicator: number;
+    /** @see {@link UTC_NPT_REFERENCE_SCALE_SAME} */
+    scale: number;
+};
+
+function readUTCNPTReferenceDescriptor(buffer: Uint8Array): UTCNPTReferenceDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(8 + 8 + 1)) {
+        return undefined;
+    }
+    const utcReference = reader.readNTP64Timestamp();
+    const nptReference = reader.readNTP64Timestamp(false);
+    const h = reader.readUint8();
+    const utcNPTLeapIndicator = h >> 6;
+    const scale = (h >> 4) & 3;
+    return {
+        tag: "utcNPTReference",
+        utcReference,
+        nptReference,
+        utcNPTLeapIndicator,
+        scale,
+    };
+}
+
+export type EventMessageDescriptor = {
+    tag: "eventMessage";
+    /** 1 */
+    eventMessageGroupId: number;
+    /** `timeMode: "immediate"` or `timeMode: "NPT"` */
+    time: EventMessageTime;
+    /** 1 */
+    eventMessageType: number;
+    eventMessageId: number;
+    privateData: Uint8Array;
+};
+
+export type EventMessageTime =
+    | {
+          timeMode: "immediate";
+      }
+    | {
+          timeMode: "UTC" | "UTCStreamTime";
+          eventMessageUTCTime: NTP64Timestamp;
+      }
+    | {
+          timeMode: "NPT";
+          eventMessageNPT: NTP64Timestamp;
+      }
+    | {
+          timeMode: "relative";
+          eventMessageRelativeTime: NTP64Timestamp;
+      };
+
+function readEventMessageDescriptor(buffer: Uint8Array): EventMessageDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(2 + 1 + 8 + 1 + 2)) {
+        return undefined;
+    }
+    const eventMessageGroupId = reader.readUint16() >> 4;
+    const timeMode = reader.readUint8();
+    let time: EventMessageTime;
+    switch (timeMode) {
+        case 0x00:
+            reader.skip(8);
+            time = { timeMode: "immediate" };
+            break;
+        case 0x01:
+            time = { timeMode: "UTC", eventMessageUTCTime: reader.readNTP64Timestamp() };
+            break;
+        case 0x02:
+            time = { timeMode: "NPT", eventMessageNPT: reader.readNTP64Timestamp(false) };
+            break;
+        case 0x03:
+            time = {
+                timeMode: "relative",
+                eventMessageRelativeTime: reader.readNTP64Timestamp(false),
+            };
+            break;
+        case 0x05:
+            time = { timeMode: "UTCStreamTime", eventMessageUTCTime: reader.readNTP64Timestamp() };
+            break;
+        default:
+            return undefined;
+    }
+    const eventMessageType = reader.readUint8();
+    const eventMessageId = reader.readUint16();
+    const privateData = reader.slice();
+    return {
+        tag: "eventMessage",
+        eventMessageGroupId,
+        time,
+        eventMessageType,
+        eventMessageId,
+        privateData,
+    };
+}
+
+export type MPUNodeDescriptor = {
+    tag: "mpuNode";
+    nodeTag: number;
+};
+
+function readMPUNodeDescriptor(buffer: Uint8Array): MPUNodeDescriptor | undefined {
+    if (buffer.length < 2) {
+        return undefined;
+    }
+    return {
+        tag: "mpuNode",
+        nodeTag: (buffer[0] << 8) | buffer[1],
     };
 }

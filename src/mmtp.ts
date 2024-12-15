@@ -1,5 +1,5 @@
 import { MMTTLVReaderEventTarget } from "./event";
-import { MMTHeader } from "./mmt-header";
+import { MMTHeader, MMTHeaderExtension } from "./mmt-header";
 import { readMessages as readMessage } from "./mmt-si";
 import { readMPU } from "./mpu";
 import { TLVContext } from "./tlv";
@@ -25,6 +25,9 @@ export const MMT_PID_INVALID = 0xffff;
 
 const MMT_MULTI_TYPE_HEADER_EXTENSION_SCRAMBLE = 0x0001;
 const MMT_SCRAMBLE_CONTROL_NONE = 0b00;
+
+const MMT_MULTI_TYPE_HEADER_EXTENSION_DOWNLOAD_ID = 0x0002;
+const MMT_MULTI_TYPE_HEADER_EXTENSION_ITEM_FRAGMENTATION = 0x0003;
 
 type Package = {
     active: boolean;
@@ -272,6 +275,19 @@ export class MMTPReader {
                             });
                         }
                         break;
+                    default:
+                        if (message.table.tableId === "AIT") {
+                            this.eventTarget.dispatchEvent("ait", {
+                                packetId,
+                                table: message.table,
+                            });
+                        } else if (message.table.tableId === "EMT") {
+                            this.eventTarget.dispatchEvent("emt", {
+                                packetId,
+                                table: message.table,
+                            });
+                        }
+                        break;
                 }
                 break;
             case "M2shortSection":
@@ -305,6 +321,19 @@ export class MMTPReader {
                                 asset.packetSequenceNumber = undefined;
                             }
                         }
+                    });
+                }
+                break;
+            case "dataTransmission":
+                if (message.table.tableId === "DDMT") {
+                    this.eventTarget.dispatchEvent("ddmt", {
+                        packetId,
+                        table: message.table,
+                    });
+                } else if (message.table.tableId === "DAMT") {
+                    this.eventTarget.dispatchEvent("damt", {
+                        packetId,
+                        table: message.table,
                     });
                 }
                 break;
@@ -350,6 +379,9 @@ export class MMTPReader {
         const prevPacketSequenceNumber = asset.packetSequenceNumber;
         asset.packetCount += 1;
         let scrambled = false;
+        let downloadId: number | undefined;
+        let itemFragmentNumber: number | undefined;
+        let lastItemFragmentNumber: number | undefined;
         if (extensionFlag) {
             if (!reader.canRead(4)) {
                 return;
@@ -383,6 +415,29 @@ export class MMTPReader {
                                 packetId,
                             });
                             scrambled = true;
+                        }
+                        break;
+                    case MMT_MULTI_TYPE_HEADER_EXTENSION_DOWNLOAD_ID:
+                        if (hdrExtLength >= 4) {
+                            downloadId =
+                                ext[i] * (1 << 24) +
+                                (ext[i + 1] << 16) +
+                                (ext[i + 2] << 8) +
+                                ext[i + 3];
+                        }
+                        break;
+                    case MMT_MULTI_TYPE_HEADER_EXTENSION_ITEM_FRAGMENTATION:
+                        if (hdrExtLength >= 8) {
+                            itemFragmentNumber =
+                                ext[i] * (1 << 24) +
+                                (ext[i + 1] << 16) +
+                                (ext[i + 2] << 8) +
+                                ext[i + 3];
+                            lastItemFragmentNumber =
+                                ext[i + 4] * (1 << 24) +
+                                (ext[i + 5] << 16) +
+                                (ext[i + 6] << 8) +
+                                ext[i + 7];
                         }
                         break;
                 }
@@ -456,6 +511,20 @@ export class MMTPReader {
             }
             const mpu = readMPU(payload);
             if (mpu != null) {
+                const headerExtensions: MMTHeaderExtension[] = [];
+                if (downloadId != null) {
+                    headerExtensions.push({
+                        headerType: "downloadId",
+                        downloadId,
+                    });
+                }
+                if (lastItemFragmentNumber != null && itemFragmentNumber != null) {
+                    headerExtensions.push({
+                        headerType: "itemFragmentation",
+                        itemFragmentNumber,
+                        lastItemFragmentNumber,
+                    });
+                }
                 const mmtHeader: MMTHeader = {
                     version,
                     fecType,
@@ -466,6 +535,7 @@ export class MMTPReader {
                     timestamp,
                     packetSequenceNumber,
                     packetCounter,
+                    headerExtensions,
                 };
                 this.eventTarget.dispatchEvent("mpu", {
                     mmtHeader,

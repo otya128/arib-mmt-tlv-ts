@@ -8,6 +8,10 @@ import {
     MHBroadcasterInformationTable,
     PackageListTable,
     MMTPackageTable,
+    MHApplicationInformationTable,
+    DataDirectoryManagementTable,
+    DataAssetManagementTable,
+    EventMessageTable,
 } from "./mmt-si";
 import { MediaProcessingUnit } from "./mpu";
 import { NTPPacket } from "./ntp";
@@ -23,6 +27,10 @@ export interface MMTTLVReaderEventMap {
     bit: MMTSIEvent<MHBroadcasterInformationTable>;
     plt: MMTSIEvent<PackageListTable>;
     mpt: MMTSIEvent<MMTPackageTable>;
+    ait: MMTSIEvent<MHApplicationInformationTable>;
+    ddmt: MMTSIEvent<DataDirectoryManagementTable>;
+    damt: MMTSIEvent<DataAssetManagementTable>;
+    emt: MMTSIEvent<EventMessageTable>;
     mpu: MediaProcessingUnitEvent;
     ntp: NTPEvent;
     tlvDiscontinuity: TLVDiscontinuityEvent;

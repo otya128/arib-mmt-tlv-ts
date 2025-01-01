@@ -57,6 +57,7 @@ type Asset = {
     packetCount: number;
     dropPacketCount: number;
     scrambledPacketCount: number;
+    bytes: number;
     tableId?: TableId;
     assetType?: number;
 };
@@ -65,6 +66,7 @@ export type MMTPacketStatistics = {
     packetCount: number;
     dropPacketCount: number;
     scrambledPacketCount: number;
+    bytes: number;
     tableId?: string;
     assetType?: number;
 };
@@ -89,6 +91,7 @@ export class MMTPReader {
                 packetCount: asset.packetCount,
                 dropPacketCount: asset.dropPacketCount,
                 scrambledPacketCount: asset.scrambledPacketCount,
+                bytes: asset.bytes,
                 tableId: asset.tableId,
                 assetType: asset.assetType,
             });
@@ -119,6 +122,7 @@ export class MMTPReader {
                 packetCount: 0,
                 dropPacketCount: 0,
                 scrambledPacketCount: 0,
+                bytes: 0,
                 tableId,
                 assetType: undefined,
             });
@@ -139,6 +143,7 @@ export class MMTPReader {
                 packetCount: 0,
                 dropPacketCount: 0,
                 scrambledPacketCount: 0,
+                bytes: 0,
                 tableId,
                 assetType,
             });
@@ -371,6 +376,7 @@ export class MMTPReader {
                 packetCount: 0,
                 dropPacketCount: 0,
                 scrambledPacketCount: 0,
+                bytes: 0,
                 tableId: undefined,
                 assetType: undefined,
             };
@@ -379,6 +385,7 @@ export class MMTPReader {
         const prevPacketSequenceNumber = asset.packetSequenceNumber;
         asset.packetSequenceNumber = packetSequenceNumber;
         asset.packetCount += 1;
+        asset.bytes += packet.byteLength;
         let scrambled = false;
         let downloadId: number | undefined;
         let itemFragmentNumber: number | undefined;

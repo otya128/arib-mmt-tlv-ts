@@ -52,7 +52,7 @@ type TableId =
 
 type Asset = {
     packetSequenceNumber?: number;
-    fragmentIndicator?: number;
+    fragmentationIndicator?: number;
     referencedPackages: Set<number>;
     packetCount: number;
     dropPacketCount: number;
@@ -114,7 +114,7 @@ export class MMTPReader {
         ] as const) {
             this.assets.set(pid, {
                 packetSequenceNumber: undefined,
-                fragmentIndicator: undefined,
+                fragmentationIndicator: undefined,
                 referencedPackages: new Set([pid]),
                 packetCount: 0,
                 dropPacketCount: 0,
@@ -134,7 +134,7 @@ export class MMTPReader {
         } else {
             this.assets.set(packetId, {
                 packetSequenceNumber: undefined,
-                fragmentIndicator: undefined,
+                fragmentationIndicator: undefined,
                 referencedPackages: new Set([mptPacketId]),
                 packetCount: 0,
                 dropPacketCount: 0,
@@ -367,7 +367,7 @@ export class MMTPReader {
             asset = {
                 referencedPackages: new Set(),
                 packetSequenceNumber: undefined,
-                fragmentIndicator: undefined,
+                fragmentationIndicator: undefined,
                 packetCount: 0,
                 dropPacketCount: 0,
                 scrambledPacketCount: 0,
@@ -377,6 +377,7 @@ export class MMTPReader {
             this.assets.set(packetId, asset);
         }
         const prevPacketSequenceNumber = asset.packetSequenceNumber;
+        asset.packetSequenceNumber = packetSequenceNumber;
         asset.packetCount += 1;
         let scrambled = false;
         let downloadId: number | undefined;
@@ -458,38 +459,36 @@ export class MMTPReader {
             const payload = reader.subarray(payloadLength);
             const h = payload[0];
             const fragmentationIndicator = (h >> 1) & 3;
-            let drop = false;
+            let indicatorDiscontinuity = false;
             const newFragment =
-                asset.fragmentIndicator === MMTP_FRAGMENTATION_INDICATOR_HEAD ||
-                asset.fragmentIndicator === MMTP_FRAGMENTATION_INDICATOR_COMPLETE;
-            switch (asset.fragmentIndicator) {
-                // tail=>middle: drop
-                // tail=>tail: drop
-                // complete=>middle: drop
-                // complete=>tail: drop
+                fragmentationIndicator === MMTP_FRAGMENTATION_INDICATOR_HEAD ||
+                fragmentationIndicator === MMTP_FRAGMENTATION_INDICATOR_COMPLETE;
+            switch (asset.fragmentationIndicator) {
+                // tail=>middle: discontinuity
+                // tail=>tail: discontinuity
+                // complete=>middle: discontinuity
+                // complete=>tail: discontinuity
                 case MMTP_FRAGMENTATION_INDICATOR_TAIL:
                 case MMTP_FRAGMENTATION_INDICATOR_COMPLETE:
-                    asset.fragmentIndicator = fragmentationIndicator;
-                    drop =
+                    indicatorDiscontinuity =
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_HEAD &&
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_COMPLETE;
                     break;
-                // head=>complete: drop
-                // head=>head: drop
-                // middle=>complete: drop
-                // middle=>head: drop
+                // head=>complete: discontinuity
+                // head=>head: discontinuity
+                // middle=>complete: discontinuity
+                // middle=>head: discontinuity
                 case MMTP_FRAGMENTATION_INDICATOR_HEAD:
                 case MMTP_FRAGMENTATION_INDICATOR_MIDDLE:
-                    asset.fragmentIndicator = fragmentationIndicator;
-                    drop =
+                    indicatorDiscontinuity =
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_MIDDLE &&
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_TAIL;
                     break;
                 default:
-                    asset.fragmentIndicator = fragmentationIndicator;
                     break;
             }
-            if (drop || newFragment) {
+            asset.fragmentationIndicator = fragmentationIndicator;
+            if (indicatorDiscontinuity || !newFragment) {
                 if (prevPacketSequenceNumber != null && asset.referencedPackages.size > 0) {
                     const expected = (prevPacketSequenceNumber + 1) % 0x100000000;
                     if (expected !== packetSequenceNumber) {
@@ -548,38 +547,36 @@ export class MMTPReader {
             }
             const h = reader.readUint8();
             const fragmentationIndicator = h >> 6;
-            let drop = false;
+            let indicatorDiscontinuity = false;
             const newFragment =
-                asset.fragmentIndicator === MMTP_FRAGMENTATION_INDICATOR_HEAD ||
-                asset.fragmentIndicator === MMTP_FRAGMENTATION_INDICATOR_COMPLETE;
-            switch (asset.fragmentIndicator) {
-                // tail=>middle: drop
-                // tail=>tail: drop
-                // complete=>middle: drop
-                // complete=>tail: drop
+                fragmentationIndicator === MMTP_FRAGMENTATION_INDICATOR_HEAD ||
+                fragmentationIndicator === MMTP_FRAGMENTATION_INDICATOR_COMPLETE;
+            switch (asset.fragmentationIndicator) {
+                // tail=>middle: discontinuity
+                // tail=>tail: discontinuity
+                // complete=>middle: discontinuity
+                // complete=>tail: discontinuity
                 case MMTP_FRAGMENTATION_INDICATOR_TAIL:
                 case MMTP_FRAGMENTATION_INDICATOR_COMPLETE:
-                    asset.fragmentIndicator = fragmentationIndicator;
-                    drop =
+                    indicatorDiscontinuity =
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_HEAD &&
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_COMPLETE;
                     break;
-                // head=>complete: drop
-                // head=>head: drop
-                // middle=>complete: drop
-                // middle=>head: drop
+                // head=>complete: discontinuity
+                // head=>head: discontinuity
+                // middle=>complete: discontinuity
+                // middle=>head: discontinuity
                 case MMTP_FRAGMENTATION_INDICATOR_HEAD:
                 case MMTP_FRAGMENTATION_INDICATOR_MIDDLE:
-                    asset.fragmentIndicator = fragmentationIndicator;
-                    drop =
+                    indicatorDiscontinuity =
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_MIDDLE &&
                         fragmentationIndicator !== MMTP_FRAGMENTATION_INDICATOR_TAIL;
                     break;
                 default:
-                    asset.fragmentIndicator = fragmentationIndicator;
                     break;
             }
-            if (drop || newFragment) {
+            asset.fragmentationIndicator = fragmentationIndicator;
+            if (indicatorDiscontinuity || !newFragment) {
                 if (prevPacketSequenceNumber != null && asset.referencedPackages.size > 0) {
                     const expected = (prevPacketSequenceNumber + 1) % 0x100000000;
                     if (expected !== packetSequenceNumber) {

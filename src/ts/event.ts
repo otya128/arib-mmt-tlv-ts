@@ -26,7 +26,7 @@ export interface TSReaderEventMap {
     dsmcc: SIEvent<
         DownloadInfoIndicationSection | DownloadDataBlockSection | StreamDescriptorSection
     >;
-    packet: TSPacket;
+    packet: { offset: number; packet: TSPacket };
 }
 
 export type TSReaderEventTarget = CustomEventTarget<TSReaderEventMap>;

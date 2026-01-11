@@ -11,6 +11,10 @@ export class TSReader {
     private packetSize?: number;
     private eventTarget?: TSReaderEventTarget = new CustomEventTarget();
     private sectionReader = new SectionReader(this.eventTarget);
+    private bytes_ = 0;
+    get bytes() {
+        return this.bytes_;
+    }
     constructor() {}
     addEventListener<K extends keyof TSReaderEventMap>(
         type: K,
@@ -33,9 +37,10 @@ export class TSReader {
     reset() {
         this.buffer = new Uint8Array(0);
         this.sectionReader.reset();
+        this.bytes_ = 0;
     }
 
-    private processPacket(packet: Uint8Array) {
+    private processPacket(offset: number, packet: Uint8Array) {
         const transportErrorIndicator = !!(packet[1] & 0x80);
         if (transportErrorIndicator) {
             return;
@@ -68,10 +73,12 @@ export class TSReader {
             continuityCounter,
             payload,
         };
-        this.eventTarget?.dispatchEvent("packet", tsPacket);
+        this.eventTarget?.dispatchEvent("packet", { offset, packet: tsPacket });
         this.sectionReader.push(tsPacket);
     }
     push(block: Uint8Array) {
+        const offset = this.bytes_ - this.buffer.length;
+        this.bytes_ += block.length;
         const buffer = new Uint8Array(this.buffer.length + block.length);
         buffer.set(this.buffer);
         buffer.set(block, this.buffer.length);
@@ -108,7 +115,7 @@ export class TSReader {
                 this.packetSize = packetSize;
                 continue;
             }
-            this.processPacket(packet);
+            this.processPacket(offset + packetOffset, packet);
         }
         this.buffer = this.buffer.slice(packetOffset);
     }

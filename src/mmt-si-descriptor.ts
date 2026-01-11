@@ -1721,13 +1721,6 @@ function readCAServiceDescriptor(buffer: Uint8Array): CAServiceDescriptor | unde
     while (reader.canRead(2)) {
         serviceIdList.push(reader.readUint16());
     }
-    console.dir({
-        tag: "caService",
-        caSystemId,
-        caBroadcasterGroupId,
-        messageControl,
-        serviceIdList,
-    });
     return {
         tag: "caService",
         caSystemId,

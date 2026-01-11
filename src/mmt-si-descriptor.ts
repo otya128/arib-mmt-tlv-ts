@@ -93,6 +93,7 @@ export type MMTSIDescriptor =
     | SIRelatedBroadcasterDescriptor
     | MHLocalTimeOffsetDescriptor
     | ScramblerDescriptor
+    | CAServiceDescriptor
     | MHApplicationDescriptor
     | MHTransportProtocolDescriptor
     | MHSimpleApplicationLocationDescriptor
@@ -224,6 +225,9 @@ export function readMMTSIDescriptors(buffer: Uint8Array): MMTSIDescriptor[] {
                 break;
             case MMT_SI_SCRAMBLER_DESCRIPTOR:
                 descriptor = readScramblerDescriptor(desc);
+                break;
+            case MMT_SI_MH_CA_SERVICE_DESCRIPTOR:
+                descriptor = readCAServiceDescriptor(desc);
                 break;
             case MMT_SI_MH_APPLICATION_DESCRIPTOR:
                 descriptor = readMHApplicationDescriptor(desc);
@@ -1694,6 +1698,42 @@ function readScramblerDescriptor(buffer: Uint8Array): ScramblerDescriptor | unde
         layerType,
         scrambleSystemId,
         privateData,
+    };
+}
+
+export type CAServiceDescriptor = {
+    tag: "caService";
+    caSystemId: number;
+    caBroadcasterGroupId: number;
+    messageControl: number;
+    serviceIdList: number[];
+};
+
+function readCAServiceDescriptor(buffer: Uint8Array): CAServiceDescriptor | undefined {
+    const reader = new BinaryReader(buffer);
+    if (!reader.canRead(4)) {
+        return undefined;
+    }
+    const caSystemId = reader.readUint16();
+    const caBroadcasterGroupId = reader.readUint8();
+    const messageControl = reader.readUint8();
+    const serviceIdList: number[] = [];
+    while (reader.canRead(2)) {
+        serviceIdList.push(reader.readUint16());
+    }
+    console.dir({
+        tag: "caService",
+        caSystemId,
+        caBroadcasterGroupId,
+        messageControl,
+        serviceIdList,
+    });
+    return {
+        tag: "caService",
+        caSystemId,
+        caBroadcasterGroupId,
+        messageControl,
+        serviceIdList,
     };
 }
 

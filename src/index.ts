@@ -1,10 +1,17 @@
 import { readTLVSI } from "./tlv-si";
 import { MMTPReader as MMTPReader, MMTPacketStatistics } from "./mmtp";
-import { TLVContext, TLV_HEADER_SIZE, readHCfBIPv6Header, readHCfBUDPHeader } from "./tlv";
+import {
+    TLVContext,
+    TLV_HEADER_SIZE,
+    readHCfBIPv6Header,
+    readHCfBUDPHeader,
+    readIPv6Header,
+    readUDPHeader,
+} from "./tlv";
 import { MMTTLVReaderEventMap, MMTTLVReaderEventTarget } from "./event";
 import { CustomEventTarget } from "./event-target";
 import { readNTPPacket } from "./ntp";
-import { BinaryReader } from "./utils";
+import { BinaryReader, ipv6ToString } from "./utils";
 
 export const TLV_SYNC_BYTE = 0x7f;
 // unused
@@ -41,7 +48,16 @@ export type CompressedIPv6UDPTLVPacket = {
 
 type ContextState = {
     sequenceNumber: number;
+    bytes: number;
+    packets: number;
     context: TLVContext;
+    dropPacketCount: number;
+};
+
+type TLVStatistic = {
+    bytes: number;
+    packetCount: number;
+    dropPacketCount: number;
 };
 
 export class MMTTLVReader {
@@ -50,6 +66,8 @@ export class MMTTLVReader {
     private eventTarget?: MMTTLVReaderEventTarget;
     private bytes_ = 0;
     private contexts: Map<number, ContextState> = new Map();
+    private nullStat: TLVStatistic;
+    private siStatistics: Map<string, TLVStatistic> = new Map();
     get bytes() {
         return this.bytes_;
     }
@@ -57,9 +75,23 @@ export class MMTTLVReader {
         this.buffer = new Uint8Array(0);
         this.eventTarget = new CustomEventTarget<MMTTLVReaderEventMap>();
         this.mmtpReader = new MMTPReader(this.eventTarget);
+        this.nullStat = { bytes: 0, packetCount: 0, dropPacketCount: 0 };
     }
     private onSI(tlvPacket: Uint8Array) {
         const si = readTLVSI(tlvPacket);
+        const tableId =
+            si?.tableId ?? `${tlvPacket[TLV_HEADER_SIZE].toString(16).padStart(2, "0")}`;
+        let stat = this.siStatistics.get(tableId);
+        if (stat == null) {
+            stat = {
+                bytes: 0,
+                packetCount: 0,
+                dropPacketCount: 0,
+            };
+            this.siStatistics.set(tableId, stat);
+        }
+        stat.bytes += tlvPacket.byteLength;
+        stat.packetCount += 1;
         if (si != null) {
             if (si.tableId === "TLV-NIT[actual]" || si.tableId === "TLV-NIT[other]") {
                 this.eventTarget?.dispatchEvent("nit", { table: si });
@@ -89,6 +121,34 @@ export class MMTTLVReader {
         this.mmtpReader.reset();
         this.bytes_ = 0;
         this.contexts.clear();
+        this.nullStat = { bytes: 0, packetCount: 0, dropPacketCount: 0 };
+        this.siStatistics.clear();
+    }
+
+    tlvStatistics(): Map<string, TLVStatistic> {
+        const r = new Map<string, TLVStatistic>();
+        r.set("null", { ...this.nullStat });
+        for (const [key, value] of this.siStatistics) {
+            r.set(key, { ...value });
+        }
+        for (const [key, value] of this.contexts) {
+            console.log(key, value);
+            if ("headerType" in value.context && value.context.headerType === "IPv6") {
+                const statKey = `[${ipv6ToString(value.context.ipv6Header.sourceAddress)}]:${value.context.udpHeader.sourcePort},[${ipv6ToString(value.context.ipv6Header.destinationAddress)}]:${value.context.udpHeader.destinationPort}`;
+                r.set(statKey, {
+                    bytes: value.bytes,
+                    packetCount: value.packets,
+                    dropPacketCount: value.dropPacketCount,
+                });
+            } else {
+                r.set(`context${key}`, {
+                    bytes: value.bytes,
+                    packetCount: value.packets,
+                    dropPacketCount: value.dropPacketCount,
+                });
+            }
+        }
+        return r;
     }
 
     mmtStatistics(): Map<number, MMTPacketStatistics> {
@@ -102,28 +162,43 @@ export class MMTTLVReader {
         if (tlvPacket.length < TLV_HEADER_SIZE + IPV6_HEADER_SIZE) {
             return;
         }
-        const ipv6PayloadLength =
-            (tlvPacket[TLV_HEADER_SIZE + 4] << 8) | tlvPacket[TLV_HEADER_SIZE + 5];
-        const nextHeader = tlvPacket[TLV_HEADER_SIZE + 6];
-        if (ipv6PayloadLength + TLV_HEADER_SIZE + IPV6_HEADER_SIZE > tlvPacket.length) {
+        const reader = new BinaryReader(tlvPacket, TLV_HEADER_SIZE);
+        const ipv6 = readIPv6Header(reader);
+        if (ipv6 == null) {
             return;
         }
-        if (nextHeader !== IP_PROTOCOL_NUMBER_UDP) {
+        if (ipv6.payloadLength + TLV_HEADER_SIZE + IPV6_HEADER_SIZE > tlvPacket.length) {
             return;
         }
-        const udpPayloadLength =
-            (tlvPacket[TLV_HEADER_SIZE + IPV6_HEADER_SIZE + 4] << 8) |
-            tlvPacket[TLV_HEADER_SIZE + IPV6_HEADER_SIZE + 5];
+        if (ipv6.nextHeader !== IP_PROTOCOL_NUMBER_UDP) {
+            return;
+        }
+        const udp = readUDPHeader(reader);
+        if (udp == null) {
+            return;
+        }
         if (
-            udpPayloadLength < UDP_HEADER_SIZE ||
-            udpPayloadLength + TLV_HEADER_SIZE + IPV6_HEADER_SIZE > tlvPacket.length
+            udp.length < UDP_HEADER_SIZE ||
+            udp.length + TLV_HEADER_SIZE + IPV6_HEADER_SIZE > tlvPacket.length
         ) {
             return;
         }
+        const statKey = `[${ipv6ToString(ipv6.sourceAddress)}]:${udp.sourcePort},[${ipv6ToString(ipv6.destinationAddress)}]:${udp.destinationPort}`;
+        let stat = this.siStatistics.get(statKey);
+        if (stat == null) {
+            stat = {
+                bytes: 0,
+                packetCount: 0,
+                dropPacketCount: 0,
+            };
+            this.siStatistics.set(statKey, stat);
+        }
+        stat.bytes += tlvPacket.byteLength;
+        stat.packetCount += 1;
         const ntp = readNTPPacket(
             tlvPacket.subarray(
                 TLV_HEADER_SIZE + IPV6_HEADER_SIZE + UDP_HEADER_SIZE,
-                TLV_HEADER_SIZE + IPV6_HEADER_SIZE + udpPayloadLength
+                TLV_HEADER_SIZE + IPV6_HEADER_SIZE + udp.length
             )
         );
         if (ntp != null) {
@@ -150,6 +225,10 @@ export class MMTTLVReader {
             packetOffset = nextPacketOffset;
             if (tlvPacket != null) {
                 const packetType = tlvPacket[1];
+                if (packetType === TLV_PACKET_TYPE_NULL) {
+                    this.nullStat.packetCount += 1;
+                    this.nullStat.bytes += tlvPacket.byteLength;
+                }
                 if (packetType === TLV_PACKET_TYPE_SI) {
                     this.onSI(tlvPacket);
                 }
@@ -163,6 +242,7 @@ export class MMTTLVReader {
                     }
                     const cid =
                         ((tlvPacket[TLV_HEADER_SIZE] << 8) | tlvPacket[TLV_HEADER_SIZE + 1]) >> 4;
+                    if (cid === 2) continue; // 1
                     const sn = tlvPacket[TLV_HEADER_SIZE + 1] & 0xf;
                     const cidHeaderType = tlvPacket[TLV_HEADER_SIZE + 2];
                     const context = this.contexts.get(cid);
@@ -184,6 +264,8 @@ export class MMTTLVReader {
                                 ipv6Header,
                                 udpHeader,
                             };
+                            context.bytes += tlvPacket.byteLength;
+                            context.packets += 1;
                             const expected = (context.sequenceNumber + 1) & 0xf;
                             context.sequenceNumber = sn;
                             if (expected !== sn) {
@@ -192,6 +274,7 @@ export class MMTTLVReader {
                                     tlvPacket.length >= pos + 2
                                         ? (tlvPacket[pos] << 8) | tlvPacket[pos + 1]
                                         : undefined;
+                                context.dropPacketCount += 1;
                                 this.eventTarget?.dispatchEvent("tlvDiscontinuity", {
                                     context: context.context,
                                     expected,
@@ -201,7 +284,13 @@ export class MMTTLVReader {
                             }
                             this.mmtpReader.push(tlvPacket, reader.tell(), context.context);
                         } else {
-                            const c: ContextState = { sequenceNumber: sn, context: { cid } };
+                            const c: ContextState = {
+                                sequenceNumber: sn,
+                                context: { cid },
+                                bytes: tlvPacket.byteLength,
+                                packets: 1,
+                                dropPacketCount: 0,
+                            };
                             this.contexts.set(cid, c);
                             this.mmtpReader.push(tlvPacket, reader.tell(), c.context);
                         }
@@ -209,12 +298,15 @@ export class MMTTLVReader {
                         if (context != null) {
                             const expected = (context.sequenceNumber + 1) & 0xf;
                             context.sequenceNumber = sn;
+                            context.bytes += tlvPacket.byteLength;
+                            context.packets += 1;
                             if (expected !== sn) {
                                 const pos = TLV_HEADER_SIZE + 3 + 2;
                                 const packetId =
                                     tlvPacket.length >= pos + 2
                                         ? (tlvPacket[pos] << 8) | tlvPacket[pos + 1]
                                         : undefined;
+                                context.dropPacketCount += 1;
                                 this.eventTarget?.dispatchEvent("tlvDiscontinuity", {
                                     context: context.context,
                                     expected,
@@ -224,7 +316,13 @@ export class MMTTLVReader {
                             }
                             this.mmtpReader.push(tlvPacket, TLV_HEADER_SIZE + 3, context.context);
                         } else {
-                            const c: ContextState = { sequenceNumber: sn, context: { cid } };
+                            const c: ContextState = {
+                                sequenceNumber: sn,
+                                context: { cid },
+                                bytes: tlvPacket.byteLength,
+                                packets: 1,
+                                dropPacketCount: 0,
+                            };
                             this.contexts.set(cid, c);
                             this.mmtpReader.push(tlvPacket, TLV_HEADER_SIZE + 3, c.context);
                         }
